@@ -39,3 +39,9 @@ ipch/
 #macOS
 .DS_Store
 
+#ai
+tasks/
+
+# build
+toonz/build/
+stuff/
