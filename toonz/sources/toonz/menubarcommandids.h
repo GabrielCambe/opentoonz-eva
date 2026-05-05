@@ -205,6 +205,7 @@
 #define MI_ShortPlay "MI_ShortPlay"
 #define MI_Loop "MI_Loop"
 #define MI_Pause "MI_Pause"
+#define MI_PreviewThis "MI_PreviewThis"
 #define MI_FirstFrame "MI_FirstFrame"
 #define MI_LastFrame "MI_LastFrame"
 #define MI_NextFrame "MI_NextFrame"

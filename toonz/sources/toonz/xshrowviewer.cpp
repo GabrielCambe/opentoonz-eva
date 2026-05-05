@@ -37,6 +37,20 @@
 
 //=============================================================================
 
+class PreviewThisCommand final : public MenuItemHandler {
+public:
+  PreviewThisCommand() : MenuItemHandler(MI_PreviewThis) {}
+  void execute() override {
+    int row = TApp::instance()->getCurrentFrame()->getFrame();
+    int r0, r1, step;
+    XsheetGUI::getPlayRange(r0, r1, step);
+    XsheetGUI::setPlayRange(row, row, step);
+    TApp::instance()->getCurrentXsheet()->notifyXsheetChanged();
+  }
+} previewThisCommand;
+
+//=============================================================================
+
 namespace XsheetGUI {
 
 //=============================================================================
@@ -1365,6 +1379,10 @@ void RowArea::contextMenuEvent(QContextMenuEvent *event) {
 
   // set both the from and to markers at the specified row
   QAction *previewThis = menu->addAction(tr("Preview This"));
+  QAction *globalPreviewThis = CommandManager::instance()->getAction(MI_PreviewThis);
+  if (globalPreviewThis) {
+    previewThis->setShortcut(globalPreviewThis->shortcut());
+  }
   connect(previewThis, SIGNAL(triggered()), SLOT(onPreviewThis()));
 
   menu->addSeparator();

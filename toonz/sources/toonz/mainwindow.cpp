@@ -2345,6 +2345,7 @@ void MainWindow::defineActions() {
   createMenuPlayAction(MI_ShortPlay, QT_TR_NOOP("Short Play"), "Alt+P");
   createMenuPlayAction(MI_Loop, QT_TR_NOOP("Loop"), "L", "loop");
   createMenuPlayAction(MI_Pause, QT_TR_NOOP("Pause"), "", "pause");
+  createMenuPlayAction(MI_PreviewThis, QT_TR_NOOP("Preview This"), "");
   createMenuPlayAction(MI_FirstFrame, QT_TR_NOOP("First Frame"), "Alt+,",
                        "framefirst");
   createMenuPlayAction(MI_LastFrame, QT_TR_NOOP("Last Frame"), "Alt+.",
