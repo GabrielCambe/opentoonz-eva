@@ -1531,7 +1531,7 @@ bool DockLayout::restoreState(const State &state) {
   for (j = 0; j < m_items.size(); ++j) {
     item = static_cast<DockWidget *>(m_items[j]->widget());
 
-    if (item->m_saveIndex > 0) {
+    if (item->m_saveIndex >= 0) {
       // Ensure that floating panels are not placed in
       // unavailable positions
       if ((geoms[j] & QApplication::desktop()->availableGeometry(item))
