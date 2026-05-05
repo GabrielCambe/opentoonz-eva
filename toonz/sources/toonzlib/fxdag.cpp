@@ -48,7 +48,7 @@ FxDag::~FxDag() {
 TOutputFx *FxDag::addOutputFx(TOutputFx *outputFx) {
   if (!outputFx) outputFx = new TOutputFx();
   outputFx->addRef();
-  m_xsheetFx->setNewIdentifier();
+  outputFx->setNewIdentifier();
   assert(outputFx->getInputPortCount() == 1);
   m_outputFxs.push_back(outputFx);
   return outputFx;
