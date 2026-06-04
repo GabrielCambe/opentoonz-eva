@@ -1,4 +1,4 @@
-set(VERSION 1.7.1)
+set(VERSION 1.8)
 
 set(MOC_HEADERS
     addfilmstripframespopup.h
@@ -434,9 +434,6 @@ else()
     )
 endif()
 
-if(WITH_TRANSLATION)
-    add_translation(toonz ${HEADERS} ${SOURCES})
-endif()
 
 set(OBJCSOURCES filebrowsermodel.cpp)
 
@@ -471,6 +468,11 @@ else()
     #    -DTAPPTOOLS_EXPORTS
     #    -DTTEST_EXPORTS
     #)
+endif()
+
+if(WITH_TRANSLATION)
+    add_translation(toonz ${HEADERS} ${SOURCES})
+    add_compile_translations_command(OpenToonz toonz)
 endif()
 
 if(BUILD_TARGET_WIN)
@@ -548,6 +550,8 @@ elseif(BUILD_ENV_APPLE)
             set(X64ONLY_LIBS ${X64ONLY_LIBS} ${CANON_LIB})
         endif()
     endif()
+
+    target_link_directories(OpenToonz PRIVATE ${MYPAINT_LIB_LIBRARY_DIRS})
 
     target_link_libraries(OpenToonz
         Qt5::Core Qt5::Gui Qt5::Network Qt5::OpenGL Qt5::Svg Qt5::Xml

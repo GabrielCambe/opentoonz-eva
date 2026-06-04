@@ -45,3 +45,6 @@ tasks/
 # build
 toonz/build/
 stuff/
+
+# generated qm files
+/stuff/config/loc
