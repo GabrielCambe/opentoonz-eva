@@ -48,3 +48,6 @@ stuff/
 
 # generated qm files
 /stuff/config/loc
+
+#vscode
+.vscode/
