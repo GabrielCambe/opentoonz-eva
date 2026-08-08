@@ -715,7 +715,7 @@ public:
     int row = pos.frame(), col = pos.layer();
     if (!m_invert) {
       // Allow the negative drag
-      if (row == m_r0 && m_colCount == m_rowCount == 1) {
+      if (row == m_r0 && m_colCount == 1 && m_rowCount == 1) {
         int r0, c0, r1, c1;
         getViewer()->getCellSelection()->getSelectedCells(r0, c0, r1, c1);
         TXsheet *xsh = getViewer()->getXsheet();
@@ -1789,6 +1789,7 @@ public:
       selection->selectColumn(*it + dCol, true);
   }
   void onRelease(const CellPosition &pos) override {
+    TApp::instance()->getCurrentSelection()->notifySelectionChanged();
     int delta = m_lastCol - m_firstCol;
     if (delta != 0) {
       TColumnSelection *selection = getViewer()->getColumnSelection();
