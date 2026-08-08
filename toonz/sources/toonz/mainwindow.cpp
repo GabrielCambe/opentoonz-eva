@@ -646,11 +646,12 @@ void MainWindow::readSettings(const QString &argumentLayoutFileName) {
 
   // Get Current Room
   TFilePath fp = ToonzFolder::getRoomsFile(currentRoomFileName);
-  Tifstream is(fp);
-  std::string name;
-  is >> name;
-
-  QString currentRoomName = QString::fromUtf8(name.c_str());
+  QString currentRoomName;
+  QFile file(fp.getQString());
+  if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    QTextStream in(&file);
+    currentRoomName = in.readLine();
+  }
   Room::RoomLoadParams params;
   params.activeRoomName = currentRoomName;
   params.forceBuildGui  = !Preferences::instance()->isLazyLoadRoomsEnabled();
@@ -1522,8 +1523,11 @@ void MainWindow::onMenuCheckboxChanged() {
 //-----------------------------------------------------------------------------
 
 void MainWindow::showEvent(QShowEvent *event) {
-  getCurrentRoom()->layout()->setEnabled(true);  // See main function in
-                                                 // main.cpp
+  getCurrentRoom()->layout()->setEnabled(true);  // See main function in main.cpp
+  
+  // Ensure custom room panels and floating windows are fully visible on startup
+  updatePanelVisibility();
+  startupFloatingPanels();
   if (Preferences::instance()->isStartupPopupEnabled() &&
       !m_startupPopupShown) {
     StartupPopup *startupPopup = new StartupPopup();
@@ -2566,6 +2570,9 @@ void MainWindow::defineActions() {
                           QT_TR_NOOP("&Custom Panel Editor..."), "", "");
   createMenuWindowsAction(MI_OpenLocator, QT_TR_NOOP("&Locator"), "",
                           "locator");
+
+  createMenuWindowsAction(MI_OpenInfiniteBackgroundPanel, QT_TR_NOOP("&Infinite Background"), "",
+                          "");
 
   menuAct =
       createToggle(MI_DockingCheck, QT_TR_NOOP("&Lock Room Panes"), "",

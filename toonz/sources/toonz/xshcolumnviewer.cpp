@@ -50,6 +50,8 @@
 #include "toonz/tcamera.h"
 #include "toonz/tcolumnhandle.h"
 #include "toonz/levelset.h"
+#include "toonz/txshchildlevel.h"
+#include "subscenecommand.h"
 
 // TnzCore includes
 #include "tconvert.h"
@@ -3027,6 +3029,58 @@ void ColumnArea::contextMenuEvent(QContextMenuEvent *event) {
         menu.addAction(cmdManager->getAction(MI_CloneChild));
         menu.addAction(cmdManager->getAction(MI_ExplodeChild));
       }
+
+      // "Move to Sub-Xsheet" submenu: list all sub-xsheets in the current
+      // xsheet (excluding columns that are part of the current selection)
+      {
+        TColumnSelection *colSelection = m_viewer->getColumnSelection();
+        std::set<int> selectedIndices;
+        if (colSelection) selectedIndices = colSelection->getIndices();
+
+        // Collect all sub-xsheet columns that are NOT in the selection
+        struct SubXsheetEntry {
+          int col;
+          QString name;
+        };
+        std::vector<SubXsheetEntry> subXsheets;
+        int colCount = xsh->getColumnCount();
+        for (int c = 0; c < colCount; ++c) {
+          if (selectedIndices.count(c)) continue;  // skip selected columns
+          if (xsh->isColumnEmpty(c)) continue;
+          int cr0, cr1;
+          xsh->getCellRange(c, cr0, cr1);
+          if (cr0 > cr1) continue;
+          TXshCell firstCell = xsh->getCell(cr0, c);
+          if (firstCell.m_level &&
+              firstCell.m_level->getChildLevel()) {
+            QString colName = QString::fromStdString(
+                xsh->getStageObject(TStageObjectId::ColumnId(c))->getName());
+            QString levelName = QString::fromStdWString(
+                firstCell.m_level->getChildLevel()->getName());
+            QString displayName =
+                QString("Col%1 - %2").arg(c + 1).arg(
+                    levelName.isEmpty() ? colName : levelName);
+            subXsheets.push_back({c, displayName});
+          }
+        }
+
+        if (!subXsheets.empty()) {
+          QMenu *moveToSubMenu =
+              new QMenu(tr("Move to Sub-Xsheet"), &menu);
+          for (const auto &entry : subXsheets) {
+            int targetCol = entry.col;
+            QAction *action = moveToSubMenu->addAction(entry.name);
+            connect(action, &QAction::triggered, [this, targetCol]() {
+              TColumnSelection *sel = m_viewer->getColumnSelection();
+              if (!sel || sel->isEmpty()) return;
+              std::set<int> indices = sel->getIndices();
+              SubsceneCmd::moveColumnsToSubXsheet(indices, targetCol);
+            });
+          }
+          menu.addMenu(moveToSubMenu);
+        }
+      }
+
       menu.addSeparator();
     }
     menu.addAction(cmdManager->getAction(MI_FoldColumns));

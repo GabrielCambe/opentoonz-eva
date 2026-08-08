@@ -334,6 +334,7 @@
 
 #define MI_OpenComboViewer "MI_OpenComboViewer"
 #define MI_OpenHistoryPanel "MI_OpenHistoryPanel"
+#define MI_OpenInfiniteBackgroundPanel "MI_OpenInfiniteBackgroundPanel"
 #define MI_OpenBrushPresetPanel "MI_OpenBrushPresetPanel"
 #define MI_OpenToolPropertiesPanel "MI_OpenToolPropertiesPanel"
 #define MI_ReplaceParentDirectory "MI_ReplaceParentDirectory"

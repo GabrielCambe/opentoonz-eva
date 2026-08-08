@@ -2643,3 +2643,312 @@ void SubsceneCmd::explode(int index) {
 
   app->getCurrentXsheet()->notifyXsheetChanged();
 }
+
+//*************************************************************************
+//    Move Columns To Existing Sub-Xsheet
+//*************************************************************************
+
+namespace {
+
+class MoveColumnsToSubXsheetUndo final : public TUndo {
+  std::set<int> m_sourceIndices;
+  int m_targetCol;
+  std::unique_ptr<StageObjectsData> m_sourceData;
+  QMap<TFxPort *, TFx *> m_sourceFxLinks;
+  QMap<TStageObjectId, TStageObjectId> m_sourceObjParents;
+  QMap<TStageObjectId, QList<TStageObjectId>> m_sourceObjChildren;
+  int m_insertedColStart;  // first column index inside the sub-xsheet
+  int m_insertedColCount;  // how many columns were inserted
+
+public:
+  MoveColumnsToSubXsheetUndo(const std::set<int> &sourceIndices, int targetCol,
+                             int insertedColStart, int insertedColCount)
+      : m_sourceIndices(sourceIndices)
+      , m_targetCol(targetCol)
+      , m_sourceData(new StageObjectsData)
+      , m_insertedColStart(insertedColStart)
+      , m_insertedColCount(insertedColCount) {
+    // Store source column data for undo restoration
+    TApp *app    = TApp::instance();
+    TXsheet *xsh = app->getCurrentXsheet()->getXsheet();
+
+    m_sourceData->storeColumns(m_sourceIndices, xsh, 0);
+    m_sourceData->storeColumnFxs(m_sourceIndices, xsh, 0);
+
+    for (auto it = m_sourceIndices.begin(); it != m_sourceIndices.end(); ++it) {
+      TXshColumn *column = xsh->getColumn(*it);
+      if (!column) continue;
+
+      // Store output links
+      if (TFx *fx = column->getFx()) {
+        for (int i = 0; i < fx->getOutputConnectionCount(); ++i) {
+          TFx *outFx = fx->getOutputConnection(i)->getOwnerFx();
+          if (xsh->getFxDag()->getInternalFxs()->containsFx(outFx))
+            m_sourceFxLinks[fx->getOutputConnection(i)] = fx;
+        }
+      }
+
+      // Store TStageObject children
+      TStageObjectId id    = TStageObjectId::ColumnId(*it);
+      TStageObject *pegbar = xsh->getStageObject(id);
+      int pegbarsCount = xsh->getStageObjectTree()->getStageObjectCount();
+      for (int i = 0; i < pegbarsCount; ++i) {
+        TStageObject *other = xsh->getStageObjectTree()->getStageObject(i);
+        if (other == pegbar) continue;
+        if (other->getParent() == id)
+          m_sourceObjChildren[id].append(other->getId());
+      }
+
+      // Store parent
+      m_sourceObjParents[id] = pegbar->getParent();
+    }
+  }
+
+  void undo() const override {
+    TApp *app    = TApp::instance();
+    TXsheet *xsh = app->getCurrentXsheet()->getXsheet();
+
+    // Step 1: Remove the columns that were inserted into the sub-xsheet
+    int adjustedTargetCol = m_targetCol;
+    for (auto idx : m_sourceIndices) {
+      if (idx < m_targetCol) adjustedTargetCol--;
+    }
+
+    int r0, r1;
+    xsh->getCellRange(adjustedTargetCol, r0, r1);
+    TXshCell cell = xsh->getCell(r0 >= 0 ? r0 : 0, adjustedTargetCol);
+    TXshChildLevel *childLevel =
+        cell.m_level ? cell.m_level->getChildLevel() : nullptr;
+    if (childLevel) {
+      TXsheet *childXsh = childLevel->getXsheet();
+      // Remove the inserted columns from the sub-xsheet (in reverse order)
+      for (int i = m_insertedColCount - 1; i >= 0; --i)
+        childXsh->removeColumn(m_insertedColStart + i);
+      childXsh->updateFrameCount();
+    }
+
+    // Step 2: Restore the source columns in the parent xsheet
+    std::set<int> indices = m_sourceIndices;
+    std::list<int> restoredSplineIds;
+    m_sourceData->restoreObjects(indices, restoredSplineIds, xsh, 0);
+
+    // Restore output connections
+    for (auto it = m_sourceFxLinks.begin(); it != m_sourceFxLinks.end(); ++it)
+      it.key()->setFx(it.value());
+
+    // Restore parent relationships
+    for (auto it = m_sourceObjParents.begin(); it != m_sourceObjParents.end();
+         ++it) {
+      TStageObject *obj = xsh->getStageObject(it.key());
+      if (obj) obj->setParent(it.value());
+    }
+
+    // Restore children relationships
+    for (auto it = m_sourceObjChildren.begin();
+         it != m_sourceObjChildren.end(); ++it) {
+      QList<TStageObjectId> children = it.value();
+      for (int i = 0; i < children.size(); ++i) {
+        TStageObject *child = xsh->getStageObject(children[i]);
+        if (child) child->setParent(it.key());
+      }
+    }
+
+    // Update the sub-xsheet cells in the parent to reflect the updated frame
+    // count
+    if (childLevel) {
+      TXsheet *childXsh = childLevel->getXsheet();
+      childXsh->updateFrameCount();
+      int frameCount = childXsh->getFrameCount();
+      if (frameCount < 1) frameCount = 1;
+
+      // Clear and re-expose the sub-xsheet cells
+      // The target column has shifted back to m_targetCol after restoration
+      xsh->clearCells(0, m_targetCol, xsh->getFrameCount());
+      for (int r = 0; r < frameCount; ++r)
+        xsh->setCell(r, m_targetCol,
+                     TXshCell(childLevel, TFrameId(r + 1)));
+    }
+
+    xsh->updateFrameCount();
+    app->getCurrentXsheet()->notifyXsheetChanged();
+    app->getCurrentObject()->notifyObjectIdSwitched();
+    app->getCurrentScene()->setDirtyFlag(true);
+  }
+
+  void redo() const override {
+    // Re-execute the move
+    std::set<int> indices = m_sourceIndices;
+    // We need a non-const copy because moveColumnsToSubXsheet takes a reference
+    // But since this is redo, we call the internal logic directly
+
+    TApp *app    = TApp::instance();
+    TXsheet *xsh = app->getCurrentXsheet()->getXsheet();
+
+    // Get the target sub-xsheet
+    int r0, r1;
+    xsh->getCellRange(m_targetCol, r0, r1);
+    TXshCell cell = xsh->getCell(r0 >= 0 ? r0 : 0, m_targetCol);
+    TXshChildLevel *childLevel =
+        cell.m_level ? cell.m_level->getChildLevel() : nullptr;
+    if (!childLevel) return;
+
+    TXsheet *childXsh = childLevel->getXsheet();
+
+    // Store source column data
+    StageObjectsData *data = new StageObjectsData();
+    data->storeColumns(indices, xsh, StageObjectsData::eDoClone);
+    data->storeColumnFxs(indices, xsh, StageObjectsData::eDoClone);
+
+    // Restore into sub-xsheet
+    std::set<int> newIndices;
+    std::list<int> restoredSplineIds;
+    data->restoreObjects(newIndices, restoredSplineIds, childXsh, 0);
+    delete data;
+
+    childXsh->updateFrameCount();
+
+    // Delete source columns from parent (block signals to avoid intermediate
+    // updates)
+    app->getCurrentXsheet()->blockSignals(true);
+    app->getCurrentObject()->blockSignals(true);
+    ColumnCmd::deleteColumns(indices, false, true); // this clears the `indices` set
+    app->getCurrentXsheet()->blockSignals(false);
+    app->getCurrentObject()->blockSignals(false);
+
+    // Update sub-xsheet cell exposure in the parent
+    // The target column index shifts if source columns were before it
+    int adjustedTargetCol = m_targetCol;
+    for (auto idx : m_sourceIndices) {
+      if ((int)idx < m_targetCol) adjustedTargetCol--;
+    }
+
+    int frameCount = childXsh->getFrameCount();
+    if (frameCount < 1) frameCount = 1;
+    xsh->clearCells(0, adjustedTargetCol, xsh->getFrameCount());
+    for (int r = 0; r < frameCount; ++r)
+      xsh->setCell(r, adjustedTargetCol,
+                   TXshCell(childLevel, TFrameId(r + 1)));
+
+    xsh->updateFrameCount();
+    app->getCurrentXsheet()->notifyXsheetChanged();
+    app->getCurrentObject()->notifyObjectIdSwitched();
+    app->getCurrentScene()->setDirtyFlag(true);
+  }
+
+  int getSize() const override { return sizeof(*this); }
+
+  QString getHistoryString() override {
+    QString str = QObject::tr("Move Column to Sub-Xsheet :  ");
+    for (auto it = m_sourceIndices.begin(); it != m_sourceIndices.end(); ++it) {
+      if (it != m_sourceIndices.begin()) str += QString(", ");
+      str += QString("Col%1").arg(QString::number((*it) + 1));
+    }
+    return str;
+  }
+
+  int getHistoryType() override { return HistoryType::Xsheet; }
+};
+
+}  // namespace
+
+//=============================================================================
+// moveColumnsToSubXsheet
+//=============================================================================
+
+void SubsceneCmd::moveColumnsToSubXsheet(std::set<int> &indices,
+                                         int targetSubXsheetCol) {
+  if (indices.empty()) return;
+
+  TApp *app    = TApp::instance();
+  TXsheet *xsh = app->getCurrentXsheet()->getXsheet();
+
+  // Prevent moving a column into itself
+  indices.erase(targetSubXsheetCol);
+  if (indices.empty()) return;
+
+  // Get the target sub-xsheet
+  int r0, r1;
+  xsh->getCellRange(targetSubXsheetCol, r0, r1);
+  TXshCell cell = xsh->getCell(r0 >= 0 ? r0 : 0, targetSubXsheetCol);
+  TXshChildLevel *childLevel =
+      cell.m_level ? cell.m_level->getChildLevel() : nullptr;
+  if (!childLevel) return;
+
+  TXsheet *childXsh = childLevel->getXsheet();
+
+  // Check for circular references: make sure none of the source columns
+  // contain the target sub-xsheet (which would create a cycle)
+  for (auto idx : indices) {
+    TXshColumn *srcCol = xsh->getColumn(idx);
+    if (!srcCol) continue;
+    TXshCellColumn *cellCol = srcCol->getCellColumn();
+    if (!cellCol) continue;
+    int cr0, cr1;
+    cellCol->getRange(cr0, cr1);
+    for (int r = cr0; r <= cr1; ++r) {
+      TXshCell c = cellCol->getCell(r);
+      if (c.m_level && c.m_level->getChildLevel()) {
+        if (childXsh->checkCircularReferences(c)) {
+          DVGui::error(QObject::tr(
+              "Cannot move: it would create a circular reference."));
+          return;
+        }
+      }
+    }
+  }
+
+  // Record the insertion point in the sub-xsheet (append after existing
+  // columns)
+  int insertedColStart = childXsh->getFirstFreeColumnIndex();
+
+  // Store source column data (with cloning for safety)
+  StageObjectsData *data = new StageObjectsData();
+  data->storeColumns(indices, xsh, StageObjectsData::eDoClone);
+  data->storeColumnFxs(indices, xsh, StageObjectsData::eDoClone);
+
+  // Restore columns into the target sub-xsheet
+  std::set<int> newIndices;
+  std::list<int> restoredSplineIds;
+  data->restoreObjects(newIndices, restoredSplineIds, childXsh, 0);
+  delete data;
+
+  int insertedColCount = (int)newIndices.size();
+
+  childXsh->updateFrameCount();
+
+  // Create the undo BEFORE deleting the source columns
+  // (the undo constructor stores the current state of the source columns)
+  MoveColumnsToSubXsheetUndo *undo = new MoveColumnsToSubXsheetUndo(
+      indices, targetSubXsheetCol, insertedColStart, insertedColCount);
+
+  // Calculate the shifted target column index BEFORE the indices are cleared
+  int adjustedTargetCol = targetSubXsheetCol;
+  for (auto idx : indices) {
+    if ((int)idx < targetSubXsheetCol) adjustedTargetCol--;
+  }
+
+  // Delete source columns from parent xsheet
+  app->getCurrentXsheet()->blockSignals(true);
+  app->getCurrentObject()->blockSignals(true);
+  ColumnCmd::deleteColumns(indices, false, true); // this clears the `indices` set
+  app->getCurrentXsheet()->blockSignals(false);
+  app->getCurrentObject()->blockSignals(false);
+
+  // Update the sub-xsheet cell exposure in the parent column.
+  int frameCount = childXsh->getFrameCount();
+  if (frameCount < 1) frameCount = 1;
+
+  // Clear existing cells and re-expose the sub-xsheet
+  xsh->clearCells(0, adjustedTargetCol, xsh->getFrameCount());
+  for (int r = 0; r < frameCount; ++r)
+    xsh->setCell(r, adjustedTargetCol,
+                 TXshCell(childLevel, TFrameId(r + 1)));
+
+  xsh->updateFrameCount();
+
+  TUndoManager::manager()->add(undo);
+
+  app->getCurrentXsheet()->notifyXsheetChanged();
+  app->getCurrentObject()->notifyObjectIdSwitched();
+  app->getCurrentScene()->setDirtyFlag(true);
+}

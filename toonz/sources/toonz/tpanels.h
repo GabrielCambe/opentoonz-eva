@@ -300,6 +300,8 @@ protected:
   // reimplementation of TPanel::widgetFocusOnEnter
   void widgetFocusOnEnter() override;
   void widgetClearFocusOnLeave() override;
+  // Forward arrow-key frame navigation when the SceneViewer canvas lacks focus
+  void keyPressEvent(QKeyEvent *event) override;
 };
 
 //=========================================================
@@ -319,6 +321,8 @@ protected:
   // reimplementation of TPanel::widgetFocusOnEnter
   void widgetFocusOnEnter() override;
   void widgetClearFocusOnLeave() override;
+  // Forward arrow-key frame navigation when the SceneViewer canvas lacks focus
+  void keyPressEvent(QKeyEvent *event) override;
 };
 
 //=========================================================

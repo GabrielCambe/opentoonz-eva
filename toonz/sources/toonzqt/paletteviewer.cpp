@@ -612,7 +612,7 @@ void PaletteViewer::createPaletteToolBar() {
     m_sharedGizmoAction = cmd->getAction("MI_OpenPltGizmo");
 
     // Clone palette gizmo action so visibility can be control
-    QAction *palGizmo = new DVAction(m_sharedGizmoAction->icon(),
+    QAction *palGizmo = new QAction(m_sharedGizmoAction->icon(),
                                      m_sharedGizmoAction->text(), this);
     // Using a lambda to forward the trigger
     connect(palGizmo, &QAction::triggered,

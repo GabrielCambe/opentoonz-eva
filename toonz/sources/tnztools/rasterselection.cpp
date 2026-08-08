@@ -730,7 +730,7 @@ void insertBoxCorners(TRectD bbox, std::vector<TThickPoint> &points,
   TVectorImageP vi(new TVectorImage());
   vi->addStroke(outPointsStroke);
   vi->findRegions();
-  assert((int)vi->getRegionCount() > 0);
+  if ((int)vi->getRegionCount() == 0) return;
   bool sameIndex = (precSegmentIndex == currentSegmentIndex);
   if (currentSegmentIndex == -1) return;
   int j;

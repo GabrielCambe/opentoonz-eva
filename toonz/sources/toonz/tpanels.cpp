@@ -103,6 +103,11 @@
 // Qt includes
 #include <QAction>
 #include <QScreen>
+#include <QApplication>
+#include <QKeyEvent>
+#include <QLineEdit>
+
+#include "sceneviewerevents.h"
 
 //=============================================================================
 // XsheetViewer
@@ -1405,6 +1410,48 @@ void ComboViewerPanelContainer::widgetClearFocusOnLeave() {
 
 //-----------------------------------------------------------------------------
 
+static void panelContainerKeyPressEvent(QKeyEvent *event, QWidget *self) {
+  // Don't interfere when a child line-edit is actively focused
+  // (e.g. the frame-number spinbox in the flip console)
+  QLineEdit *lineEdit =
+      dynamic_cast<QLineEdit *>(QApplication::focusWidget());
+  if (lineEdit && self->isAncestorOf(lineEdit)) {
+    event->ignore();
+    return;
+  }
+
+  int key = event->key();
+
+  // Shift+Up/Down: skip over holds in the xsheet
+  if (changeFrameSkippingHolds(event)) return;
+
+  // Plain arrow / home / end: frame navigation
+  TFrameHandle *fh = TApp::instance()->getCurrentFrame();
+  if (key == Qt::Key_Up || key == Qt::Key_Left)
+    fh->prevFrame();
+  else if (key == Qt::Key_Down || key == Qt::Key_Right)
+    fh->nextFrame();
+  else if (key == Qt::Key_Home)
+    fh->firstFrame();
+  else if (key == Qt::Key_End)
+    fh->lastFrame();
+  else {
+    // Key not handled here — let the base class try
+    event->ignore();
+    return;
+  }
+
+  event->accept();
+}
+
+void ComboViewerPanelContainer::keyPressEvent(QKeyEvent *event) {
+  panelContainerKeyPressEvent(event, this);
+  if (!event->isAccepted())
+    StyleShortcutSwitchablePanel::keyPressEvent(event);
+}
+
+//-----------------------------------------------------------------------------
+
 class ComboViewerFactory final : public TPanelFactory {
 public:
   ComboViewerFactory() : TPanelFactory("ComboViewer") {}
@@ -1445,6 +1492,12 @@ void SceneViewerPanelContainer::widgetFocusOnEnter() {
 }
 void SceneViewerPanelContainer::widgetClearFocusOnLeave() {
   m_sceneViewer->onLeavePanel();
+}
+
+void SceneViewerPanelContainer::keyPressEvent(QKeyEvent *event) {
+  panelContainerKeyPressEvent(event, this);
+  if (!event->isAccepted())
+    StyleShortcutSwitchablePanel::keyPressEvent(event);
 }
 
 //-----------------------------------------------------------------------------

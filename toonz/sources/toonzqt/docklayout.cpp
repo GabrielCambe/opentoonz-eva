@@ -1532,16 +1532,18 @@ bool DockLayout::restoreState(const State &state) {
     item = static_cast<DockWidget *>(m_items[j]->widget());
 
     if (item->m_saveIndex >= 0) {
-      // Ensure that floating panels are not placed in
-      // unavailable positions
-      if ((geoms[j] & QApplication::desktop()->availableGeometry(item))
-              .isEmpty())
-        item->move(recoverX += 50, recoverY += 50);
-
-      // Set floating appearances
+      // Set floating appearances first so changing flags doesn't reset geometry
       item->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint);
       item->setFloatingAppearance();
       item->m_floating = true;
+      
+      item->setGeometry(geoms[j]);
+
+      // Ensure that floating panels are not placed in
+      // unavailable positions
+      if ((geoms[j] & QApplication::desktop()->availableGeometry(geoms[j].center()))
+              .isEmpty())
+        item->move(recoverX += 50, recoverY += 50);
     }
   }
 

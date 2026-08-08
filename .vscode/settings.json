@@ -1,3 +1,23 @@
 {
-    "cmake.sourceDirectory": "C:/Users/almei/Documents/opentoonz-eva/toonz/sources"
+    // Where the top-level CMakeLists.txt lives (unchanged).
+    "cmake.sourceDirectory": "C:/Users/almei/Documents/opentoonz-eva/toonz/sources",
+
+    // Reuse your EXISTING build folder + cache so VS Code does not reconfigure from scratch.
+    // This is the same dir the Visual Studio solution was generated into.
+    "cmake.buildDirectory": "C:/Users/almei/Documents/opentoonz-eva/toonz/build",
+
+    // Match the generator already recorded in toonz/build/CMakeCache.txt.
+    "cmake.generator": "Visual Studio 18 2026",
+
+    // Pass Qt location through to CMake (same value as your cache).
+    "cmake.configureSettings": {
+        "QT_PATH": "C:/Qt/5.15.2/msvc2019_64"
+    },
+
+    // Don't auto-configure on folder open; the cache is already valid.
+    "cmake.configureOnOpen": false,
+
+    // Default thing the Build button compiles. ALL_BUILD = the whole solution,
+    // like hitting Build Solution in Visual Studio. Change to "OpenToonz" to build just the app.
+    "cmake.buildTarget": "ALL_BUILD"
 }
