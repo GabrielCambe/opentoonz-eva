@@ -51,3 +51,5 @@ stuff/
 
 #vscode
 .vscode/
+
+.xtv*
