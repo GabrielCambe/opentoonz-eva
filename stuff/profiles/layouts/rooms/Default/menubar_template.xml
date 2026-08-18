@@ -185,6 +185,11 @@
         <command>MI_LipSyncPopup</command>
         <separator/>
         <command>MI_RemoveEmptyColumns</command>
+        <separator/>
+        <command>MI_PrevColumn</command>
+        <command>MI_NextColumn</command>
+        <command>MI_PrevFilledColumn</command>
+        <command>MI_NextFilledColumn</command>
     </menu>
     <menu title="Cells">
         <command>MI_Reverse</command>

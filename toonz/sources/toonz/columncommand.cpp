@@ -5,6 +5,7 @@
 // Tnz6 includes
 #include "menubarcommandids.h"
 #include "columnselection.h"
+#include "cellselection.h"
 #include "tapp.h"
 #include "expressionreferencemanager.h"
 
@@ -1638,3 +1639,70 @@ public:
 void ColumnCmd::addConvertToVectorUndo(std::set<int> &newColumnIndices) {
   TUndoManager::manager()->add(new ConvertToVectorUndo(newColumnIndices));
 }
+
+//=============================================================================
+// Column navigation
+//-----------------------------------------------------------------------------
+
+namespace {
+
+//! Moves the current column sideways, mirroring what the left/right arrow keys
+//! do inside the xsheet. Being regular commands, these can be bound to
+//! shortcuts and used while the focus is on the viewer, so the current cell can
+//! be moved across columns without reaching for the mouse.
+class ColumnNavigationCommand final : public MenuItemHandler {
+  int m_direction;   //!< +1 moves rightwards, -1 leftwards
+  bool m_skipEmpty;  //!< land on columns holding cells only
+
+public:
+  ColumnNavigationCommand(const char *cmdId, int direction, bool skipEmpty)
+      : MenuItemHandler(cmdId)
+      , m_direction(direction)
+      , m_skipEmpty(skipEmpty) {}
+
+  void execute() override {
+    TApp *app    = TApp::instance();
+    TXsheet *xsh = app->getCurrentXsheet()->getXsheet();
+    if (!xsh) return;
+
+    int firstCol =
+        Preferences::instance()->isXsheetCameraColumnVisible() ? -1 : 0;
+    // the first free column is reachable too, so that a new level can be
+    // started to the right of the last one without using the mouse
+    int lastCol = xsh->getColumnCount();
+
+    int currentCol = app->getCurrentColumn()->getColumnIndex();
+    int col        = currentCol + m_direction;
+
+    if (m_skipEmpty) {
+      while (col >= 0 && col < lastCol && xsh->isColumnEmpty(col))
+        col += m_direction;
+      // the camera column holds no cell: it is never a valid destination here
+      if (col < 0 || col >= lastCol) return;
+    } else if (col < firstCol || col > lastCol)
+      return;
+
+    int shift = col - currentCol;
+
+    // let the cell selection follow, as the arrow keys do in the xsheet
+    TCellSelection *cellSel =
+        dynamic_cast<TCellSelection *>(TSelection::getCurrent());
+    if (cellSel && !cellSel->isEmpty()) {
+      int r0, c0, r1, c1;
+      cellSel->getSelectedCells(r0, c0, r1, c1);
+      if (c0 + shift >= firstCol) {
+        cellSel->selectCells(r0, c0 + shift, r1, c1 + shift);
+        app->getCurrentSelection()->notifySelectionChanged();
+      }
+    }
+
+    app->getCurrentColumn()->setColumnIndex(col);
+  }
+};
+
+ColumnNavigationCommand nextColumnCommand(MI_NextColumn, 1, false),
+    prevColumnCommand(MI_PrevColumn, -1, false),
+    nextFilledColumnCommand(MI_NextFilledColumn, 1, true),
+    prevFilledColumnCommand(MI_PrevFilledColumn, -1, true);
+
+}  // namespace

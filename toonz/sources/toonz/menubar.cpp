@@ -1329,6 +1329,11 @@ QMenuBar *StackedMenuBar::createFullMenuBar() {
   addMenuItem(xsheetMenu, MI_LipSyncPopup);
   xsheetMenu->addSeparator();
   addMenuItem(xsheetMenu, MI_RemoveEmptyColumns);
+  xsheetMenu->addSeparator();
+  addMenuItem(xsheetMenu, MI_PrevColumn);
+  addMenuItem(xsheetMenu, MI_NextColumn);
+  addMenuItem(xsheetMenu, MI_PrevFilledColumn);
+  addMenuItem(xsheetMenu, MI_NextFilledColumn);
 
   // Menu' CELLS
   QMenu *cellsMenu = addMenu(tr("Cells"), fullMenuBar);

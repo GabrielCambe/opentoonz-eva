@@ -2486,6 +2486,12 @@ void MainWindow::defineActions() {
   createMenuXsheetAction(MI_RemoveEmptyColumns,
                          QT_TR_NOOP("Remove Empty Columns"), "",
                          "remove_empty_columns");
+  createMenuXsheetAction(MI_PrevColumn, QT_TR_NOOP("Previous Column"), "", "");
+  createMenuXsheetAction(MI_NextColumn, QT_TR_NOOP("Next Column"), "", "");
+  createMenuXsheetAction(MI_PrevFilledColumn,
+                         QT_TR_NOOP("Previous Filled Column"), "", "");
+  createMenuXsheetAction(MI_NextFilledColumn, QT_TR_NOOP("Next Filled Column"),
+                         "", "");
   createMenuXsheetAction(MI_LipSyncPopup,
                          QT_TR_NOOP("&Apply Lip Sync Data to Column"), "Alt+L",
                          "dialogue");
