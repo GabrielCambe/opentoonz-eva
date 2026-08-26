@@ -59,6 +59,7 @@
 #include <QListWidget>
 #include <QGroupBox>
 #include <QKeySequence>
+#include <QSignalBlocker>
 
 using namespace DVGui;
 
@@ -1106,12 +1107,13 @@ QWidget* PreferencesPopup::createUI(PreferencesItemId id,
   case QMetaType::QVariantMap:  // used in colorCalibrationLutPaths
   {
     DVGui::FileField* field = new DVGui::FileField(
-        this, QString("- Please specify 3DLUT file (.3dl) -"), false, true);
+        this, QString("- Please specify 3D LUT file (.3dl or .cube) -"), false,
+        true);
     QString lutPath = m_pref->getColorCalibrationLutPath(
         LutManager::instance()->getMonitorName());
     if (!lutPath.isEmpty()) field->setPath(lutPath);
     field->setFileMode(QFileDialog::ExistingFile);
-    QStringList lutFileTypes = {"3dl"};
+    QStringList lutFileTypes = {"3dl", "cube"};
     field->setFilters(lutFileTypes);
     connect(field, &FileField::pathChanged, this,
             &PreferencesPopup::onLutPathChanged);
@@ -1354,7 +1356,8 @@ QString PreferencesPopup::getUIString(PreferencesItemId id) {
       // Tools
       // {dropdownShortcutsCycleOptions, tr("Dropdown Shortcuts:")}, //
       // removed
-      {FillOnlysavebox, tr("Use the TLV Savebox to Limit Filling Operations")},
+      {FillOnlysavebox,
+       tr("Use the TLV Savebox to Limit Fill and Segment Eraser Operations")},
       {DefRegionWithPaint,
        tr("Define Filling Region Using both Lines and Areas")},
       {ReferFillPrevailing, tr("Paint Under Lines in Refer Fill")},
@@ -1683,6 +1686,13 @@ PreferencesPopup::PreferencesPopup()
 
   connect(categoryList, &QListWidget::currentRowChanged, stackedWidget,
           &QStackedWidget::setCurrentIndex);
+  connect(m_pref, &Preferences::fillOnlySaveboxChanged, this,
+          [this](bool enabled) {
+            CheckBox *saveboxCheck = getUI<CheckBox *>(FillOnlysavebox);
+            if (!saveboxCheck || saveboxCheck->isChecked() == enabled) return;
+            QSignalBlocker blocker(saveboxCheck);
+            saveboxCheck->setChecked(enabled);
+          });
 }
 
 //-----------------------------------------------------------------------------
