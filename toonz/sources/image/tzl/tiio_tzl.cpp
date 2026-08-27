@@ -1660,14 +1660,16 @@ m_lrp->m_frameIndex = m_frameIndex;*/
     reverse((char *)&ydpi, sizeof(double));
 #endif
 
+    delete[] imgBuff;
+    imgBuff = 0;
+
     imgBuffSize = m_lx * m_ly * sizeof(TPixelCM32);
     assert(actualBuffSize <= imgBuffSize);
+    if (actualBuffSize <= 0 || actualBuffSize > imgBuffSize)
+      throw TException("Loading tlv: buffer size error");
 
-    delete[] imgBuff;
     imgBuff = new UCHAR[imgBuffSize];
-    // int ret =
     fread(imgBuff, actualBuffSize, 1, chan);
-    // assert(ret==1);
   }
 
   Header *header = (Header *)imgBuff;
@@ -1784,11 +1786,11 @@ m_lrp->m_frameIndex = m_frameIndex;*/
 
   imgBuffSize = m_lx * m_ly * sizeof(TPixelCM32);
   assert(actualBuffSize <= imgBuffSize);
+  if (actualBuffSize <= 0 || actualBuffSize > imgBuffSize)
+    throw TException("Loading tlv: buffer size error");
 
   imgBuff = new UCHAR[imgBuffSize];
-  // int ret =
   fread(imgBuff, actualBuffSize, 1, chan);
-  // assert(ret==1);
 
   Header *header = (Header *)imgBuff;
 
@@ -1818,8 +1820,6 @@ m_lrp->m_frameIndex = m_frameIndex;*/
     }
     ras->unlock();
   }
-
-// codec.compress(ras, 1, &imgBuff, actualBuffSize);
 #endif
 
   TRect savebox(TPoint(sbx0, sby0), TDimension(sblx, sbly));
@@ -1837,18 +1837,9 @@ m_lrp->m_frameIndex = m_frameIndex;*/
 
   delete[] imgBuff;
 
-  // codec.decompress(m_compressedBuffer, m_compressedBufferSize, ras);
-
-  // assert(0);
-  // TToonzImageP ti; //  = new
-  // TToonzImage(m_lx,m_ly,savebox,imgBuff,actualBuffSize);
   TToonzImageP ti(ras, savebox);
-  // if(dpiflag)
   ti->setDpi(xdpi, ydpi);
-  // m_lrp->m_level->setFrame(TFrameId(m_frameIndex+1), ti);
   ti->setPalette(m_lrp->m_level->getPalette());
-  // delete [] imgBuff;
-  // imgBuff = 0;
   return ti;
 
   // ToonzImageUtils::updateRas32(ti);
@@ -1904,7 +1895,9 @@ TImageP TImageReaderTzl::load13() {
     fread(&actualBuffSize, sizeof(TINT32), 1, chan);
 
     imgBuffSize = (iconLx * iconLy * sizeof(TPixelCM32));
-    imgBuff     = new UCHAR[imgBuffSize];
+    if (actualBuffSize <= 0 || actualBuffSize > imgBuffSize)
+      throw TException("Loading tlv: icon buffer size error.");
+    imgBuff = new UCHAR[imgBuffSize];
     fread(imgBuff, actualBuffSize, 1, chan);
 
 #if !TNZ_LITTLE_ENDIAN
@@ -1978,17 +1971,14 @@ TImageP TImageReaderTzl::load13() {
     return ti;
   }
 
+  if (actualBuffSize <= 0 ||
+      actualBuffSize > (int)(m_lx * m_ly * sizeof(TPixelCM32)))
+    throw TException("Loading tlv: buffer size error");
+
   TRasterCM32P raux = TRasterCM32P(m_lx, m_ly);
   raux->lock();
-  imgBuff = (UCHAR *)raux->getRawData();  // new UCHAR[imgBuffSize];
-  // imgBuff = new UCHAR[imgBuffSize];
-  // imgBuffSize = m_lx*m_ly*sizeof(TPixelCM32);
-  // assert(actualBuffSize <= imgBuffSize);
-
-  // imgBuff = new UCHAR[imgBuffSize];
-  // int ret =
+  imgBuff = (UCHAR *)raux->getRawData();
   fread(imgBuff, actualBuffSize, 1, chan);
-  // assert(ret==1);
 
   Header *header = (Header *)imgBuff;
 
@@ -2489,9 +2479,14 @@ const TImageInfo *TImageReaderTzl::getImageInfo10() const {
     reverse((char *)&ydpi, sizeof(double));
 #endif
 
+    delete[] imgBuff;
+    imgBuff = 0;
+
     imgBuffSize = m_lx * m_ly * sizeof(TPixelCM32);
     assert(actualBuffSize <= imgBuffSize);
-    delete[] imgBuff;
+    if (actualBuffSize <= 0 || actualBuffSize > imgBuffSize)
+      throw TException("Loading tlv: buffer size error");
+
     imgBuff = new UCHAR[imgBuffSize];
     fread(imgBuff, actualBuffSize, 1, chan);
   }
