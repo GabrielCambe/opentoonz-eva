@@ -63,7 +63,8 @@ const char *kDefaultUrl = "http://127.0.0.1:8188";
 //! palavras digitadas. 600 ms e a pausa entre tracos: o sinal de desenho chega
 //! uma vez por traco concluido, entao o que se mede aqui e o intervalo de um
 //! traco ao proximo, e ao hachurar eles se sucedem bem mais rapido que isso.
-//! Calibrado com o usuario; ver D1 em tasks/knowledge/aiassist_live_draw__design.md.
+//! Calibrado com o usuario; ver D1 em
+//! tasks/knowledge/aiassist_live_draw__design.md.
 const int kTextDebounceMs = 300;
 const int kDrawDebounceMs = 600;
 
@@ -99,22 +100,23 @@ QString templatesFolder() {
 //-----------------------------------------------------------------------------
 
 AIAssistController::AIAssistController(QWidget *parent) : QWidget(parent) {
-  // Sem isto o painel fica preto. O QSS do OpenToonz pinta QWidget com #484848 e
-  // TPanel com #101010, mas o Qt so aplica background de folha de estilo em
-  // subclasses proprias de QWidget quando WA_StyledBackground esta ligado. Sem a
-  // flag esta widget nao pinta nada e aparece o preto do TPanel por baixo.
+  // Sem isto o painel fica preto. O QSS do OpenToonz pinta QWidget com #484848
+  // e TPanel com #101010, mas o Qt so aplica background de folha de estilo em
+  // subclasses proprias de QWidget quando WA_StyledBackground esta ligado. Sem
+  // a flag esta widget nao pinta nada e aparece o preto do TPanel por baixo.
   setAttribute(Qt::WA_StyledBackground, true);
   setObjectName(QStringLiteral("AIAssistController"));
 
   m_client = new ComfyClient(this);
   m_client->setBaseUrl(
-      QSettings().value(QLatin1String(kUrlKey), QLatin1String(kDefaultUrl))
+      QSettings()
+          .value(QLatin1String(kUrlKey), QLatin1String(kDefaultUrl))
           .toString());
 
-  m_templateCombo  = new QComboBox(this);
-  m_promptField    = new QLineEdit(this);
-  m_negativeField  = new QLineEdit(this);
-  m_seedField      = new QSpinBox(this);
+  m_templateCombo = new QComboBox(this);
+  m_promptField   = new QLineEdit(this);
+  m_negativeField = new QLineEdit(this);
+  m_seedField     = new QSpinBox(this);
   m_useReferenceCheck =
       new QCheckBox(tr("Use the drawing I am editing as reference"), this);
   m_useReferenceCheck->setChecked(true);
@@ -122,8 +124,7 @@ AIAssistController::AIAssistController(QWidget *parent) : QWidget(parent) {
   // liveIsActive() continua sendo o unico predicado que autoriza trabalho ao
   // vivo, e o invariante "com o Live desligado o painel nao faz nada" fica
   // garantido num lugar so. Ver D2 no design.
-  m_liveCheck =
-      new QCheckBox(tr("Live: regenerate as I draw or type"), this);
+  m_liveCheck = new QCheckBox(tr("Live: regenerate as I draw or type"), this);
 
   // Disparar a cada tecla, como o Acer Drawing Assistant faz, produz trabalho
   // que ja nasce obsoleto: no /history deles ha 143 prompts progressivamente
@@ -183,14 +184,12 @@ AIAssistController::AIAssistController(QWidget *parent) : QWidget(parent) {
   connect(m_templateCombo, SIGNAL(currentIndexChanged(int)), this,
           SLOT(onTemplateChanged(int)));
   // O texto de status muda conforme o check, entao reaproveita o mesmo slot.
-  connect(m_useReferenceCheck, &QCheckBox::toggled, this, [this](bool) {
-    onTemplateChanged(m_templateCombo->currentIndex());
-  });
+  connect(m_useReferenceCheck, &QCheckBox::toggled, this,
+          [this](bool) { onTemplateChanged(m_templateCombo->currentIndex()); });
 
-  connect(m_promptField, &QLineEdit::textEdited, this,
-          [this](const QString &) {
-            if (liveIsActive()) armLive(LiveTrigger::Text);
-          });
+  connect(m_promptField, &QLineEdit::textEdited, this, [this](const QString &) {
+    if (liveIsActive()) armLive(LiveTrigger::Text);
+  });
   connect(m_debounce, &QTimer::timeout, this,
           &AIAssistController::maybeGenerateLive);
   connect(m_spinTimer, &QTimer::timeout, this, [this]() {
@@ -207,8 +206,10 @@ AIAssistController::AIAssistController(QWidget *parent) : QWidget(parent) {
 
   // A linha de escala fala da celula corrente, entao precisa acompanhar quando
   // ela muda. Sem isto ela mentiria assim que o usuario trocasse de frame.
-  TApp *app = TApp::instance();
-  auto refresh = [this]() { onTemplateChanged(m_templateCombo->currentIndex()); };
+  TApp *app    = TApp::instance();
+  auto refresh = [this]() {
+    onTemplateChanged(m_templateCombo->currentIndex());
+  };
   connect(app->getCurrentFrame(), &TFrameHandle::frameSwitched, this, refresh);
   connect(app->getCurrentColumn(), &TColumnHandle::columnIndexSwitched, this,
           refresh);
@@ -294,8 +295,8 @@ void AIAssistController::onDrawingChanged() {
   if (m_suppressLiveTrigger) return;
   if (currentLevelIsGenerated()) return;
 
-  // A revisao avanca aqui, e nao no momento da geracao: e este o instante em que
-  // se sabe que o desenho mudou. Se a geracao em voo terminar depois disto,
+  // A revisao avanca aqui, e nao no momento da geracao: e este o instante em
+  // que se sabe que o desenho mudou. Se a geracao em voo terminar depois disto,
   // coalesceLive() ve serial != submetido e dispara mais uma vez - que e o que
   // impede a mudanca de se perder.
   ++m_drawSerial;
@@ -341,16 +342,16 @@ void AIAssistController::maybeGenerateLive() {
 void AIAssistController::coalesceLive() {
   if (!liveIsActive()) return;
   // Coalescencia final: durante o ciclo que acabou, o usuario pode ter digitado
-  // varias teclas ou desenhado varios tracos. Dispara UMA vez, com o estado mais
-  // recente, em vez de uma vez por tecla ou por traco. Assim o numero de
-  // geracoes e limitado pela velocidade da GPU, e nao pela velocidade da mao - e
-  // nunca se fica atrasado.
+  // varias teclas ou desenhado varios tracos. Dispara UMA vez, com o estado
+  // mais recente, em vez de uma vez por tecla ou por traco. Assim o numero de
+  // geracoes e limitado pela velocidade da GPU, e nao pela velocidade da mao -
+  // e nunca se fica atrasado.
   //
   // Comparar so o texto nao bastava. Desenhando, o prompt nao muda entre
   // geracoes: a comparacao retornava cedo e a coalescencia nunca re-disparava,
   // entao desenhar durante uma geracao perdia a mudanca sem aviso nenhum.
-  const bool textChanged     = m_promptField->text() != m_submittedPrompt;
-  const bool drawingChanged  = m_drawSerial != m_submittedDrawSerial;
+  const bool textChanged    = m_promptField->text() != m_submittedPrompt;
+  const bool drawingChanged = m_drawSerial != m_submittedDrawSerial;
   if (!textChanged && !drawingChanged) return;
 
   // Quem mudou decide a pausa. Se foi o desenho, vale a pausa entre tracos,
@@ -388,8 +389,9 @@ void AIAssistController::onTemplateChanged(int index) {
   if (!tpl.consumesReference())
     notes << tr("This graph ignores the drawing (text only).");
   else if (!m_useReferenceCheck->isChecked())
-    notes << tr("Reference off: ControlNet strength goes to 0 and denoise to "
-                "1.0, so the drawing has no influence.");
+    notes << tr(
+        "Reference off: ControlNet strength goes to 0 and denoise to "
+        "1.0, so the drawing has no influence.");
   else
     notes << describeReferenceScaling(tpl);
   if (!tpl.isLiveCapable())
@@ -410,19 +412,21 @@ void AIAssistController::onTemplateChanged(int index) {
     // desenho esta desligado de proposito. Sem dizer isso, o painel pareceria
     // simplesmente quebrado ali.
     if (currentLevelIsGenerated())
-      notes << tr("This cell holds a generated image, so drawing here will not "
-                  "retrigger - it would feed the result back in as its own "
-                  "reference. Draw on your own level to regenerate.");
+      notes << tr(
+          "This cell holds a generated image, so drawing here will not "
+          "retrigger - it would feed the result back in as its own "
+          "reference. Draw on your own level to regenerate.");
   }
 
   if (!effective) {
     if (!tpl.hasNegativePrompt())
       notes << tr("Negative prompt off: this graph has no AI_NEGATIVE node.");
     else
-      notes << tr("Negative prompt off: this graph runs at cfg %1. The sampler "
-                  "computes noise = uncond + cfg * (cond - uncond), so at cfg 1 "
-                  "the negative term cancels out and would be ignored.")
-                   .arg(tpl.samplerCfg(), 0, 'g', 3);
+      notes
+          << tr("Negative prompt off: this graph runs at cfg %1. The sampler "
+                "computes noise = uncond + cfg * (cond - uncond), so at cfg 1 "
+                "the negative term cancels out and would be ignored.")
+                 .arg(tpl.samplerCfg(), 0, 'g', 3);
   }
   m_statusLabel->setText(notes.join(QLatin1Char('\n')));
 }
@@ -431,9 +435,10 @@ void AIAssistController::onTemplateChanged(int index) {
 
 namespace {
 
-//! Rasteriza um TVectorImage sem tocar no original. O level continua vetorial no
-//! ComboViewer; o que vai para o ComfyUI e uma copia rasterizada e descartavel.
-//! Precedente: toonzlib/scriptbinding_rasterizer.cpp renderVectorImage().
+//! Rasteriza um TVectorImage sem tocar no original. O level continua vetorial
+//! no ComboViewer; o que vai para o ComfyUI e uma copia rasterizada e
+//! descartavel. Precedente: toonzlib/scriptbinding_rasterizer.cpp
+//! renderVectorImage().
 TRaster32P rasterizeVector(const TVectorImageP &vi, ToonzScene *scene,
                            QString &errorOut) {
   TPalette *palette = vi->getPalette();
@@ -461,8 +466,7 @@ TRaster32P rasterizeVector(const TVectorImageP &vi, ToonzScene *scene,
   // getRaster() ja devolve uma copia do buffer offline, nao um ponteiro para
   // dentro do contexto: pode sobreviver ao fim desta funcao.
   TRaster32P rendered = glContext.getRaster();
-  if (!rendered)
-    errorOut = QObject::tr("Could not render the vector level.");
+  if (!rendered) errorOut = QObject::tr("Could not render the vector level.");
   return rendered;
 }
 
@@ -530,14 +534,14 @@ QString AIAssistController::describeReferenceScaling(
   const bool haveTarget = tpl.referenceScaleTarget(dstW, dstH);
 
   if (!haveSource)
-    return tr("Uses the cell you are editing as reference (none selected yet).");
+    return tr(
+        "Uses the cell you are editing as reference (none selected yet).");
 
   const QString source = tr("Reference: %1x%2").arg(srcW).arg(srcH);
   if (!haveTarget)
     return source + tr(" - this graph does not say how it resizes it.");
 
-  if (srcW == dstW && srcH == dstH)
-    return source + tr(" - sent as is.");
+  if (srcW == dstW && srcH == dstH) return source + tr(" - sent as is.");
 
   // ImageScale com crop desabilitado leva a exatamente WxH, sem preservar
   // proporcao. Se as proporcoes nao batem o desenho chega esticado, e isso
@@ -566,15 +570,16 @@ bool AIAssistController::resolveCurrentCell(TXshSimpleLevel *&slOut,
   // Duas maneiras diferentes de "o desenho atual", e usar a errada foi um bug
   // real: TFrameHandle::getFid() so vale no modo LevelFrame (Level Strip). Ao
   // desenhar no ComboViewer sobre uma coluna o app esta em SceneFrame, onde o
-  // handle guarda uma LINHA e o fid armazenado esta velho. Ai a referencia certa
-  // e a celula do xsheet.
+  // handle guarda uma LINHA e o fid armazenado esta velho. Ai a referencia
+  // certa e a celula do xsheet.
   if (frameHandle->isEditingLevel()) {
     slOut  = app->getCurrentLevel() ? app->getCurrentLevel()->getSimpleLevel()
                                     : nullptr;
     fidOut = frameHandle->getFid();
   } else {
-    TXsheet *xsh = app->getCurrentXsheet() ? app->getCurrentXsheet()->getXsheet()
-                                           : nullptr;
+    TXsheet *xsh  = app->getCurrentXsheet()
+                        ? app->getCurrentXsheet()->getXsheet()
+                        : nullptr;
     const int col = app->getCurrentColumn()
                         ? app->getCurrentColumn()->getColumnIndex()
                         : -1;
@@ -598,10 +603,10 @@ bool AIAssistController::referenceSourceSize(int &widthOut,
   // Vetor nao tem resolucao propria: e rasterizado no enquadramento da camera,
   // entao o tamanho da referencia e o da camera, nao o do level.
   if (sl->getType() == PLI_XSHLEVEL) {
-    TApp *app         = TApp::instance();
-    ToonzScene *scene = app->getCurrentScene() ? app->getCurrentScene()->getScene()
-                                               : nullptr;
-    TCamera *camera   = scene ? scene->getCurrentCamera() : nullptr;
+    TApp *app = TApp::instance();
+    ToonzScene *scene =
+        app->getCurrentScene() ? app->getCurrentScene()->getScene() : nullptr;
+    TCamera *camera = scene ? scene->getCurrentCamera() : nullptr;
     if (!camera) return false;
     widthOut  = camera->getRes().lx;
     heightOut = camera->getRes().ly;
@@ -625,7 +630,7 @@ bool AIAssistController::currentLevelIsGenerated() const {
   // Guarda por convencao de nome, com o custo assumido: renomear o nivel a
   // desarma. A alternativa seria registrar os caminhos inseridos, o que so
   // sobreviveria a uma sessao. Ver D3 no design.
-  const TFilePath path = sl->getPath();
+  const TFilePath path   = sl->getPath();
   const std::string name = path.getName();
   if (name.rfind(kGeneratedPrefix, 0) != 0) return false;
   return path.getType() == "png";
@@ -645,7 +650,8 @@ QString AIAssistController::currentFrameAsPngBase64(QString &errorOut) const {
     return QString();
   }
 
-  const TImageP img = sl->getFullsampledFrame(fid, ImageManager::dontPutInCache);
+  const TImageP img =
+      sl->getFullsampledFrame(fid, ImageManager::dontPutInCache);
   if (!img) {
     errorOut = tr("This cell has no image yet.");
     return QString();
@@ -708,8 +714,7 @@ void AIAssistController::setBusy(bool busy) {
 
 void AIAssistController::refreshBusyStatus() {
   static const char *kFrames[] = {"|", "/", "-", "\\"};
-  const QString frame =
-      QString::fromLatin1(kFrames[m_spinFrame % 4]);
+  const QString frame          = QString::fromLatin1(kFrames[m_spinFrame % 4]);
 
   // Os segundos nao sao enfeite: o timeout do cliente e de 300 s, e sem eles
   // nao da para distinguir "o servidor esta lento" de "travou". Em modo ao vivo
@@ -762,10 +767,9 @@ void AIAssistController::onGenerate() {
   // a revisao do desenho. coalesceLive() compara as duas com o estado atual.
   m_submittedPrompt     = m_promptField->text();
   m_submittedDrawSerial = m_drawSerial;
-  m_client->generate(
-      tpl.build(m_submittedPrompt, negative, reference, m_seedField->value(),
-                useReference),
-      tpl.outputNodeId());
+  m_client->generate(tpl.build(m_submittedPrompt, negative, reference,
+                               m_seedField->value(), useReference),
+                     tpl.outputNodeId());
 }
 
 //-----------------------------------------------------------------------------
@@ -777,9 +781,10 @@ void AIAssistController::onImageReady(const QImage &image) {
       m_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
   m_insertButton->setEnabled(true);
   coalesceLive();
-  m_statusLabel->setText(tr("Generated %1x%2. Nothing was added to the scene yet.")
-                             .arg(image.width())
-                             .arg(image.height()));
+  m_statusLabel->setText(
+      tr("Generated %1x%2. Nothing was added to the scene yet.")
+          .arg(image.width())
+          .arg(image.height()));
 }
 
 //-----------------------------------------------------------------------------
@@ -833,8 +838,8 @@ void AIAssistController::onInsertAsLevel() {
   }
 
   if (!m_result.save(QString::fromStdWString(fp.getWideString()), "PNG")) {
-    onFailed(tr("Could not write %1").arg(
-        QString::fromStdWString(fp.getWideString())));
+    onFailed(tr("Could not write %1")
+                 .arg(QString::fromStdWString(fp.getWideString())));
     return;
   }
 

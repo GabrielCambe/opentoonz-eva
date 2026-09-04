@@ -1,0 +1,539 @@
+<task id="sdxl-setup" status="completed">
+  <description>
+    Instalar o SDXL no ComfyUI desta maquina, validar os quatro templates SDXL ja escritos, medir
+    tempo e pico de VRAM em cada um, e concluir qual rota vale a pena. Os grafos e o painel do
+    OpenToonz ja existem e NAO precisam ser alterados: esta task e sobre pesos, nomes de arquivo
+    e numeros. Executor esperado: Claude Code rodando localmente, com rede, disco e acesso a
+    127.0.0.1:8188 - coisas que o agente que escreveu os templates nao tinha.
+  </description>
+
+  <notes>
+    Task profile: setup
+    Risk level: medium
+    Process weight: governed          (inferido: Execution mode e governed-xml)
+    Execution mode: governed-xml
+    Execution autonomy: interactive
+    Approval mode: user-gated
+    Delivery mode: iterative          (inferido: cada template validado ja e um resultado executavel)
+    Validation policy: standard       (inferido: campo ausente = standard)
+    Intent: none declared             (plano legado, sem Intent Brief)
+    Design guidance: ver secao "Restricoes" abaixo
+    Knowledge index: enabled
+
+    LEIA PRIMEIRO tasks/knowledge/aiassist__sdxl_notes.md. Ele tem o orcamento de VRAM, a lista
+    de downloads, os nomes de arquivo esperados e a tabela de medicao em branco que esta task
+    preenche. E tasks/knowledge/aiassist__comfyui_protocol.md tem o contrato da API.
+
+    Contexto minimo para quem chega sem historico:
+    - Repositorio: fork opentoonz-eva. O painel "AI Assist" (Windows to AI Assist) manda grafos
+      em formato API para um ComfyUI e mostra o resultado.
+    - Os templates ficam em toonz/sources/aiassist/graphs/. O painel os le de
+      applicationDirPath()/aiassist/graphs, ou da pasta apontada por AIASSIST_GRAPHS.
+      Copias ja existem em toonz/build/Release/aiassist/graphs e .../Debug/....
+      QUALQUER template novo ou editado precisa ser copiado para as duas pastas de build.
+    - Contrato: o painel nao entende grafo, entende marcadores em _meta.title. Obrigatorios
+      AI_PROMPT, AI_SAMPLER, AI_OUTPUT. Opcionais AI_NEGATIVE, AI_REFERENCE, AI_CONTROL,
+      AI_SCALE. Nao renomeie marcador sem ler o protocolo.
+    - tools/aiassist_oracle.py e uma implementacao de referencia em stdlib puro que faz o mesmo
+      que o painel, pela linha de comando. USE ELE PARA TUDO NESTA TASK: nao e preciso compilar
+      nem abrir o OpenToonz para validar grafo nem para medir tempo.
+
+          python tools\aiassist_oracle.py --graph toonz\sources\aiassist\graphs\X.json ^
+            --prompt "a small stone house" --seed 42 --out teste.png
+          # img2img tambem aceita --reference algum.png
+
+    Os quatro templates SDXL desta task:
+      sdxl_lightning_t2i.json    8 passos, cfg 1.5, T2I-Adapter    (modo ao vivo funciona)
+      sdxl_lightning_cnet.json   8 passos, cfg 1.5, ControlNet     (modo ao vivo funciona)
+      sdxl_base_t2i.json        28 passos, cfg 7.0, T2I-Adapter    (sem modo ao vivo)
+      sdxl_base_cnet.json       28 passos, cfg 7.0, ControlNet     (sem modo ao vivo)
+    Os dois pares diferem apenas no campo control_net_name do no "Load Control Model". O ComfyUI
+    carrega T2I-Adapter pelo mesmo ControlNetLoader, desde que o arquivo esteja em
+    models/controlnet/.
+
+    ATENCAO ao ComfyUI desta maquina: ele foi instalado pelo Acer Drawing Assistant, nao a mao.
+    Existe um servico Windows (CreatorSpaceWindowsService) que gerencia essa instalacao e pode
+    atualiza-la. Consequencia: arquivos colocados dentro da pasta dele podem sumir numa
+    atualizacao. Avaliar usar extra_model_paths.yaml apontando para uma pasta de modelos fora da
+    instalacao gerenciada, em vez de despejar 9 GB la dentro. Decisao para o p1.
+
+    Restricoes:
+    - NAO alterar codigo C++ do painel. Se um template exigir mudanca no painel para funcionar,
+      pare e relate: isso e sinal de que o template esta fugindo do contrato.
+    - NAO apagar nem sobrescrever modelos ja instalados. O DreamShaper_8_pruned e a LoRA de LCM
+      sao o que faz o SD 1.5 funcionar hoje; se sumirem, os tres grafos sd15_* param.
+    - Downloads somam perto de 9 GB. Conferir espaco livre ANTES.
+    - Medicao de VRAM: nvidia-smi --query-gpu=memory.used --format=csv -l 1 durante a geracao,
+      ou o Gerenciador de Tarefas. A placa e uma RTX 5070 Laptop com 8123 MB.
+
+    ---
+    Progress:
+    - p1-s1 OK. /system_stats: ComfyUI v0.2.6, Python 3.12.7 embutido, torch 2.11.0+cu128,
+      dispositivo cuda:0 "NVIDIA GeForce RTX 5070 Laptop GPU : cudaMallocAsync",
+      vram_total 8518041600 B = 8123 MiB. Confere com o numero do sdxl_notes. RAM 32 GB, 10,2 GB livres.
+    - p1-s2 OK. Raiz ativa de modelos:
+      C:\ProgramData\CreatorSpaceFramework\ComfyUI\ComfyUI\models\
+      (argv do servidor confirma main.py nessa arvore, --windows-standalone-build --port 8188).
+      Gerenciada pelo CreatorSpaceWindowsService (Running / Automatic).
+    - p1-s3 OK. Inventario real hoje:
+      CheckpointLoaderSimple.ckpt_name = ['DreamShaper_8_pruned.safetensors']
+      LoraLoader.lora_name             = ['pytorch_lora_weights.safetensors']   (LoRA LCM SD1.5)
+      ControlNetLoader.control_net_name= ['control_v11p_sd15_scribble.pth']
+      Nenhum nome SDXL presente ainda; os quatro downloads do p2 sao todos necessarios.
+    - p1-s4 OK. Volume C: 953 GB, 306 GB livres. Folga larga sobre os ~9 GB. Sem impedimento.
+      Observacao: extra_model_paths.yaml NAO existe na instalacao; so o .example (1527 B).
+
+    Decisions:
+    - [LOW] 2026-09-03 - Ferramenta de introspecao xtv nao encontrada nesta maquina
+      (sem checkout de XML-Skills-Workflow). Plano lido direto do arquivo. Sem impacto.
+    - [MEDIUM] 2026-09-03 - problema: p1..p4 vieram sem input/output/review/approval,
+      logo so o p5 tinha gate, o que contraria Approval mode: user-gated.
+      options: (a) parar e reescrever com xml-task-creator; (b) normalizar o scaffolding
+      das fases pendentes aqui mesmo; (c) executar sem gates intermediarios.
+      decision+rationale: (b). Sao elementos de trilha de auditoria em fases ainda pending,
+      permitidos pelo edit-future freeze; (a) custaria uma volta inteira sem mudar o trabalho
+      e (c) removeria o controle do usuario num plano medium-risk que baixa 9 GB.
+      status: aplicado, 5 gates presentes.
+
+    - p1-s5 RESOLVIDO. Guidance do usuario (interactive), 2026-09-03:
+      (a) LOCAL: pasta externa C:\AI\comfy-models + extra_model_paths.yaml dentro da instalacao.
+          Motivo: uma atualizacao do CreatorSpaceWindowsService custaria um yaml de ~1 KB,
+          trivial de recriar, em vez de 9 GB de pesos.
+      (b) RESTART: usar POST /free (unload_models + free_memory) no lugar de reiniciar o
+          servico da Acer. Atende o objetivo do p4 (nao medir modelo em cache) sem elevacao
+          nem ~10 reinicios de um servico do OEM.
+      (c) DOWNLOADS: os quatro arquivos confirmados, ~9 GB.
+
+    Open questions:
+    - RESSALVA sobre (b): extra_model_paths.yaml so e lido no arranque do processo. O POST /free
+      descarrega pesos mas NAO recarrega configuracao. Logo o p2-s5 precisa de UM restart unico
+      para o yaml passar a valer. A ser levantado no p2-s5, nao aqui.
+
+    Progress p2:
+    - Nomes exigidos, lidos dos proprios templates (nao do sdxl_notes):
+      ckpt_name        = sd_xl_base_1.0.safetensors                  (os quatro)
+      lora_name        = sdxl_lightning_8step_lora.safetensors       (so os dois lightning)
+      control_net_name = t2i-adapter_diffusers_xl_sketch.safetensors (variantes t2i)
+      control_net_name = controlnet-sdxl-scribble.safetensors        (variantes cnet)
+      Confere com a secao 4 do sdxl_notes. Amostragem: lightning euler/sgm_uniform 8p cfg1.5,
+      base dpmpp_2m/karras 28p cfg7.0, denoise 0.75 nos quatro.
+    - URLs conferidas por HEAD antes de baixar (200 nas quatro), total 9,45 GiB contra 306 GB livres:
+      sd_xl_base_1.0              6,46 GiB  stabilityai/stable-diffusion-xl-base-1.0
+      sdxl_lightning_8step_lora   0,37 GiB  ByteDance/SDXL-Lightning
+      t2i-adapter sketch XL       0,29 GiB  TencentARC/t2i-adapter-sketch-sdxl-1.0
+      controlnet scribble XL      2,33 GiB  xinsir/controlnet-scribble-sdxl-1.0
+      Os dois ultimos vem como diffusion_pytorch_model.safetensors e sao salvos ja com o nome
+      que o template espera - renomear no download, como manda a secao 4 do sdxl_notes.
+    - extra_model_paths.yaml criado em
+      C:\ProgramData\CreatorSpaceFramework\ComfyUI\ComfyUI\extra_model_paths.yaml,
+      grupo sdxl_external, base_path C:/AI/comfy-models/. Aditivo: nao esconde os modelos
+      SD 1.5 ja instalados. O cabecalho do arquivo explica como recria-lo se o servico o apagar.
+
+    - Pre-voo do p3 feito durante a espera do download (nao consome GPU, nao depende do p2):
+      * As 11 classes de no usadas pelos quatro templates SDXL existem neste servidor.
+        Em particular LoadImageFromBase64 esta presente - nenhum custom node faltando.
+      * LoadImageFromBase64.input.required = {"data": STRING}. E exatamente o campo que o
+        oraculo escreve no AI_REFERENCE. (A docstring do oraculo chama a classe de
+        LoadImageFromB64; o nome real e LoadImageFromBase64. Como o casamento e por
+        _meta.title, isso e so um comentario desatualizado, nao um defeito.)
+      * KSampler aceita euler, dpmpp_2m e lcm; scheduler aceita sgm_uniform e karras.
+        Os quatro templates e a base sd15 usam so valores validos.
+      Consequencia: das tres causas de falha que o p3-s4 antecipa, duas ja estao descartadas.
+      Resta a terceira, nome de arquivo nao resolvido, que e o que o p2-s5 decide.
+    - Base de comparacao do p4-s2 conferida: sd15_scribble_img2img usa DreamShaper_8_pruned,
+      pytorch_lora_weights e control_v11p_sd15_scribble - todos ja instalados. Nao precisa
+      de download nem de mudanca de path para medir a linha de base.
+
+    Decisions:
+    - [LOW] 2026-09-03 - p3-s1 (imagem de referencia) foi executado durante a espera do download
+      do p2, fora de ordem. Nao depende de nenhuma saida do p2 e nao antecipa julgamento do gate;
+      registrado aqui para a trilha ficar fiel.
+    - [LOW] 2026-09-03 - primeiro salvamento da referencia caiu em
+      toonz/sources/aiassist/graphs/tools/ porque um cd anterior persistiu no shell.
+      Movida para tools/testdata/ e a pasta intrusa removida; graphs/ voltou a ter so os 7 JSON.
+      O p3-s1 proibe explicitamente guardar dentro de graphs/.
+
+    Progress p2 (continuacao):
+    - p2-s1..s4 OK. Os quatro arquivos baixados para C:\AI\comfy-models, ja com o nome que os
+      templates esperam (os dois de condicionamento vem como diffusion_pytorch_model.safetensors
+      na origem e foram salvos renomeados, como a secao 4 do sdxl_notes recomenda).
+      Verificacao alem do tamanho: li o header safetensors de cada um e conferi que o maior
+      data_offset declarado + o header batem exatamente com o tamanho do arquivo.
+        6616,7 MiB  2515 tensores  sd_xl_base_1.0.safetensors               (tem conditioner.embedders.*, os dois text encoders do SDXL)
+         375,6 MiB  2364 tensores  sdxl_lightning_8step_lora.safetensors
+         301,5 MiB    38 tensores  t2i-adapter_diffusers_xl_sketch.safetensors
+        2386,2 MiB   844 tensores  controlnet-sdxl-scribble.safetensors
+      Nenhum modelo pre-existente foi tocado: DreamShaper, a LoRA LCM e o control_v11p_sd15
+      continuam onde estavam.
+    - p2-s5 BLOQUEADO. Descoberta: o processo do ComfyUI (PID 4288, porta 8188) roda sob outro
+      usuario - Get-Process nao devolve nem o Path. Nao ha como reinicia-lo sem elevacao, e o
+      POST /free escolhido no p1 descarrega pesos da VRAM mas NAO recarrega configuracao.
+      Como extra_model_paths.yaml so e lido no arranque, ele ainda nao vale: /object_info
+      continua listando so os tres modelos SD 1.5.
+
+    Decisions:
+    - [HIGH] 2026-09-03 - problema: o mecanismo aprovado no p1 (extra_model_paths.yaml) exige um
+      restart que o executor nao consegue dar.
+      options: (a) hardlinks dentro de models/ apontando para C:\AI - testado e funcionando,
+      sem restart, bytes contados uma vez, e apagar a entrada gerenciada nao destroi os dados;
+      (b) manter so o yaml e o usuario reinicia o ComfyUI uma vez; (c) copiar os 9,5 GB para
+      dentro da pasta gerenciada - descartada, e exatamente o risco que o p1 escolheu evitar.
+      decision+rationale: (b), escolha explicita do usuario em 2026-09-03 apos ver a medicao da
+      opcao (a). Um unico mecanismo, sem entradas extras na arvore gerenciada.
+      status: aguardando o restart do usuario. O hardlink de teste foi desfeito e a pasta
+      gerenciada conferida de volta ao estado original (so control_v11p_sd15_scribble.pth e o
+      arquivo-marcador). O original em C:\AI voltou a links=1, tamanho intacto.
+    - [LOW] 2026-09-03 - evidencia colhida no teste, util para o veredito do p5: o ComfyUI
+      reflete arquivo novo em models/ SEM restart (o /object_info passou a listar o t2i-adapter
+      no instante seguinte ao mklink /H). O que exige restart e a leitura da configuracao,
+      nao a descoberta de arquivos.
+
+    Progress p2 (fechamento):
+    - Usuario reiniciou a maquina inteira (18:00). O extra_model_paths.yaml sobreviveu ao reboot,
+      intacto (778 B) - primeira evidencia de que o servico nao limpa a pasta a cada arranque.
+    - Descoberta: o ComfyUI NAO sobe junto com o servico. Apos o boot o
+      CreatorSpaceWindowsService estava Running mas sem processo python e sem ninguem na 8188;
+      ele e lancado quando o Acer Drawing Assistant abre.
+    - [MEDIUM] 2026-09-03 - problema: como colocar o ComfyUI de pe apos o reboot.
+      options: (a) o executor lanca pelo run_nvidia_gpu.bat da propria instalacao;
+      (b) o usuario abre o Acer Drawing Assistant.
+      decision+rationale: (a), escolha do usuario. Passa a rodar sob a conta almei, o que
+      destrava os reinicios do p4 sem interromper o usuario a cada template - exatamente o
+      que o p2-s5 nao conseguia fazer antes. Ressalva registrada: se o Drawing Assistant for
+      aberto depois, pode disputar a porta 8188; nesse caso encerrar a instancia do executor.
+      status: aplicado. Servidor no ar, custom nodes comfyui-base64-to-image e
+      comfyui_controlnet_aux carregados sem erro.
+    - p2-s5 PASSA. /object_info depois do restart:
+      ckpt_name        = [DreamShaper_8_pruned, sd_xl_base_1.0]
+      lora_name        = [pytorch_lora_weights, sdxl_lightning_8step_lora]
+      control_net_name = [control_v11p_sd15_scribble, controlnet-sdxl-scribble,
+                          t2i-adapter_diffusers_xl_sketch]
+      Os quatro nomes SDXL batem letra por letra com o que os templates escrevem, entao
+      NENHUM grafo foi editado e nada foi copiado para toonz/build/*/aiassist/graphs.
+      Os tres modelos SD 1.5 seguem listados: os grafos sd15_* nao foram afetados.
+
+    Checkpoint (p2): com o ComfyUI no ar (run_nvidia_gpu.bat, porta 8188), os quatro templates
+    SDXL ja tem todos os pesos que pedem. Da para exercitar qualquer um deles com
+      python tools\aiassist_oracle.py --graph toonz\sources\aiassist\graphs\sdxl_lightning_t2i.json
+        --prompt "a small stone house" --seed 42 --reference tools\testdata\scribble_house_1024.png --out teste.png
+
+    Progress p3:
+    - p3-s1 OK. tools/testdata/scribble_house_1024.png: rabisco preto sobre branco, 1024x1024 RGB,
+      contorno de casa com porta, janelas, chamine e algumas pedras. Fora de graphs/, como o
+      passo exige. (Detalhe do percurso registrado nas Decisions: caiu no lugar errado na
+      primeira tentativa e foi movido.)
+    - p3-s2 OK. --dry-run nos quatro templates: todos validam, sem editar nada. Cada um expoe
+      AI_PROMPT, AI_SAMPLER, AI_OUTPUT (obrigatorios) mais AI_NEGATIVE, AI_REFERENCE, AI_CONTROL
+      e AI_SCALE. Nenhum titulo duplicado.
+    - p3-s4 (fix) provavelmente nao sera necessario: das tres causas de falha que ele antecipa,
+      as duas primeiras ja foram descartadas no pre-voo e a terceira caiu no p2-s5.
+
+    - p3-s3 OK. Os quatro geraram, na primeira tentativa, sem um unico erro do ComfyUI.
+      Mesmo prompt ("a small stone house, storybook illustration"), mesma seed (42), mesmo
+      negativo ("blurry, photo"), mesma referencia. PNGs em tools/testdata/p3/ e a folha de
+      comparacao em tools/testdata/p3/_comparacao.png.
+        sdxl_lightning_t2i    995427 B   extremos RGB (31,255)(32,255)(21,255)
+        sdxl_lightning_cnet   321280 B   extremos RGB (0,255)(0,255)(0,255)
+        sdxl_base_t2i         992154 B   extremos RGB (39,255)(42,255)(35,255)
+        sdxl_base_cnet        571551 B   extremos RGB (0,255)(0,255)(0,255)
+      O primeiro levou 16,5 s ja incluindo o carregamento do SDXL do zero - bem abaixo do que
+      o orcamento do sdxl_notes faria temer numa placa de 8 GB.
+    - p3-s4 sem acao. E um passo condicional ("Se o ComfyUI recusar algum grafo") e a condicao
+      nao ocorreu: os quatro POST /prompt foram aceitos. As tres causas que ele lista foram todas descartadas: custom nodes
+      presentes (pre-voo), sampler/scheduler validos (pre-voo), nomes de arquivo resolvidos
+      (p2-s5). O ajuste que os resultados realmente pedem e de parametro, nao de conserto, e
+      p5-s1 e o passo que trata disso.
+
+    - [HIGH] 2026-09-03 - ACHADO DE QUALIDADE, entra no p5.
+      problema: os quatro templates devolvem o rabisco de entrada redesenhado, nao uma
+      ilustracao. cfg 7.0 do base produz quase o mesmo que cfg 1.5 do lightning, e 28 passos
+      quase o mesmo que 8 - sinal de que o prompt quase nao esta agindo.
+      diagnostico (lido do grafo, no sdxl_lightning_t2i.json): o MESMO desenho condiciona por
+      dois caminhos simultaneos.
+        no 31 KSampler.latent_image &lt;- no 10 VAEEncode(ImageScale(referencia)), denoise 0.75
+        no 31 KSampler.positive     &lt;- no 25 ControlNetApply(strength 1.0, image=mesma referencia)
+      Ou seja: img2img partindo do proprio rabisco E controle estrutural sobre o mesmo rabisco
+      na forca maxima. O modelo fica preso pelos dois lados e sobra pouca margem para o prompt.
+      Nao e defeito de implementacao - a forma do grafo e legitima e respeita o contrato de
+      marcadores - e a calibragem que a secao 6 do sdxl_notes ja marcava como chute inicial.
+      options: (a) baixar denoise; (b) baixar ControlNetApply.strength; (c) subir cfg no
+      lightning; (d) combinacao. Uma mudanca por vez, como o p5-s1 exige.
+      status: registrado para o p5-s1. NAO tratado no p3 - mexer em parametro aqui invalidaria
+      a medicao do p4, que precisa medir os templates como estao hoje.
+    - [LOW] 2026-09-03 - as variantes t2i nao tem preto puro (minimo 31-42 por canal) e as cnet
+      tem (minimo 0). Coerente com o T2I-Adapter condicionar mais frouxo que o ControlNet.
+
+    Checkpoint (p3): os quatro templates SDXL geram de ponta a ponta pelo oraculo. Reproduzir com
+      python tools\aiassist_oracle.py --graph toonz\sources\aiassist\graphs\sdxl_base_t2i.json
+        --prompt "a small stone house, storybook illustration" --seed 42
+        --reference tools\testdata\scribble_house_1024.png --out saida.png
+
+    Progress p4:
+    - [HIGH] 2026-09-03 - DEFEITO NO METODO DO p4-s1, corrigido.
+      problema: o p4-s1 manda "gerar duas vezes com o mesmo prompt e seed" e anotar a segunda.
+      Isso nao mede nada neste servidor: o ComfyUI tem cache de execucao e um segundo
+      POST /prompt com grafo identico volta do cache sem rodar o sampler.
+      evidencia: primeira rodada do arranjo, antes da correcao -
+        sdxl_lightning_t2i   1a 15,25 s | 2a 0,18 s, 1 amostra de VRAM
+        sdxl_lightning_cnet  1a  ~     | 2a 0,21 s, 1 amostra de VRAM
+      Uma geracao SDXL de 8 passos a 1024x1024 nao ocorre em 0,2 s; e cache.
+      options: (a) medir a 2a com uma seed diferente, modelo ja residente;
+      (b) desligar o cache do ComfyUI - nao ha chave para isso na API que o painel usa;
+      (c) reiniciar entre a 1a e a 2a - ai a 2a paga o carregamento de novo, que e
+      exatamente o que o passo quer evitar.
+      decision+rationale: (a). E a unica que preserva a intencao escrita do proprio passo
+      ("a primeira paga o carregamento do modelo"): a seed identica era incidental, o que o
+      passo quer e uma execucao real sem o custo de carregar o modelo. Alem disso passei a
+      medir DUAS geracoes (seeds 43 e 44) em vez de uma, para o numero vir com dispersao.
+      A geracao de aquecimento mantem a seed 42, a mesma do p3, para continuidade.
+      status: arranjo corrigido, medicao reiniciada do zero. Os numeros da primeira rodada
+      foram descartados, nao aproveitados.
+      ATENCAO ao revisor: isto muda o metodo escrito no p4-s1. Se o gate do p4 discordar,
+      a rodada inteira precisa ser refeita.
+
+    - Medicao concluida nos cinco, cada linha com DUAS geracoes medidas e reinicio real do
+      ComfyUI antes de cada template. Reprodutibilidade boa: nenhuma linha varia mais que 1 s
+      entre as duas medidas, exceto lightning_cnet (9,92 / 8,89).
+        template               aquec(s)    medidas(s)   pico MiB   delta MiB
+        sdxl_lightning_t2i        10,89   5,81 / 5,80       7231        5467
+        sdxl_lightning_cnet       16,89   9,92 / 8,89       7715        5942
+        sdxl_base_t2i             23,35  15,60 / 15,51      7403        5686
+        sdxl_base_cnet            43,78  36,45 / 36,02      7705        6014
+        sd15_scribble_img2img      6,84   1,19 / 1,20       5040        3325
+    - Prova de que o cache nao esta mais mascarando nada: os PNG das geracoes medidas tem
+      hash e tamanho distintos entre si (conferido por sha256 em tools/testdata/p4/).
+      As amostras de VRAM por geracao subiram de 1 para 24-146, coerente com execucao real.
+    - OFFLOAD LOCALIZADO, com numero. Ajustando tempo = custo_fixo + passos x custo_por_passo
+      no par t2i, que nao satura a placa: custo fixo 1,92 s, 0,4855 s por passo. Do
+      lightning_cnet sai 0,8718 s por passo com ControlNet. O modelo preve 26,3 s para o
+      base_cnet; o medido foi 36,0 s - 9,7 s a mais, +37%. Esse excesso e a placa saturada
+      trocando pesos com a RAM. As outras tres linhas escalam de forma previsivel e NAO
+      mostram offload, inclusive o lightning_cnet que chega a 408 MiB do teto.
+    - Correcao a uma expectativa do sdxl_notes: a secao 3 supunha que somar ControlNet
+      garantiria offload. Com o Lightning nao garantiu - o pico foi 7715 MiB, o mais alto de
+      todos, e mesmo assim o tempo escalou normalmente. O que dispara o offload e a combinacao
+      de ControlNet com 28 passos, nao o ControlNet sozinho.
+    - p4-s2 OK. Base de comparacao medida nas mesmas condicoes: sd15_scribble_img2img faz
+      1,19 / 1,20 s com pico 5040 MiB. E a unica das cinco abaixo do limiar de ~2 s do
+      modo ao vivo, e usa ~2,4 GB menos de VRAM que qualquer rota SDXL.
+    - p4-s3 OK. Secao 5 do aiassist__sdxl_notes.md reescrita com os cinco resultados e uma
+      observacao por linha. As colunas mudaram de "1a/2a geracao" para "carregamento + 1a" e
+      "geracoes medidas", e foi acrescentada uma nota de metodo explicando o cache do ComfyUI
+      e por que a seed precisou mudar. Backup do arquivo original no scratchpad da sessao.
+
+    Checkpoint (p4): tabela de medicao real em tasks/knowledge/aiassist__sdxl_notes.md secao 5,
+    e os dados crus em tools/testdata/p4/medicoes.json.
+
+    Progress p5:
+    - p5-s1 OK. Varredura de um parametro por vez sobre o sdxl_lightning_t2i, seed 43 fixa,
+      11 variantes. Grafos temporarios no scratchpad, nunca em graphs/. Metricas objetivas:
+      tinta (fracao de pixels abaixo de 128) e cor (desvio padrao medio entre canais).
+        base (denoise 0.75)   tinta 3,6%  cor 1,93     (o rabisco puro: tinta 3,0%  cor 0,00)
+        denoise 0.85 / 0.88   tinta 3,4%  cor 3,90     ainda desenho de linha
+        denoise 0.90 ate 1.00 tinta 0,1%  cor 6,12+    passa a pintar
+        strength 0.70/0.50/0.30 tinta ~3,4%  cor 0,69/0,41/0,49   PIORA, fica chapado
+        cfg 2.5 / 4.0         cor 1,64 / 1,24          quase nenhum efeito
+        sched karras/normal   cor 2,48 / 1,84          quase nenhum efeito
+      Conclusao: o botao e o denoise, com transicao abrupta entre 0,88 e 0,90. Baixar a forca
+      do ControlNet piora - quem prendia era o latente, nao o controle.
+    - Hipotese minha que os dados refutaram: supus que o denoise estivesse quantizado por
+      int(steps/denoise) e que 0,90 a 1,00 fossem identicos. Os hashes sao distintos entre si,
+      entao o cronograma varia continuamente; o que satura sao as metricas grosseiras.
+      Corrigido antes de escrever o veredito.
+    - Segundo achado, so visivel ao levar o denoise 0.95 aos outros templates: e uma INTERACAO
+      de dois fatores. Com denoise 0.95 as variantes cnet melhoram muito (base_cnet: tinta 6,3%
+      cor 19,34 - casa de pedra com cor de verdade) e as t2i continuam palidas (base_t2i: cor
+      6,72, fantasma). O T2I-Adapter e fraco demais para segurar a estrutura quando a ancora
+      de img2img sai. Uma varredura de um parametro por vez nao poderia ter revelado isso.
+    - Ajuste aplicado: denoise 0.75 -> 0.95 nos quatro templates SDXL, e as copias em
+      toonz/build/Release/aiassist/graphs e toonz/build/Debug/aiassist/graphs sincronizadas.
+      Conferido que as tres copias de cada template concordam. Os tres sd15_* NAO foram
+      tocados (denoise 0.7 / 1.0 / 1.0 como estavam). Dry-run OK nos quatro apos a edicao e
+      uma geracao real com o sdxl_base_cnet ja editado.
+    - RESSALVA de coerencia: a tabela do p4 foi medida com denoise 0.75. Com 0.95 os tempos
+      sobem pouco (5,80 -> ~6,3 s no lightning_t2i, ~8%), porque o denoise mais alto usa mais
+      do cronograma de sigmas. Os tempos da varredura NAO sao comparaveis aos do p4: la houve
+      reinicio por template e aqui nao, entao o estado de memoria difere.
+    - p5-s2 BLOQUEADO, passado ao usuario. Motivo tecnico: o request_access do computer-use
+      resolve "OpenToonz" para o binario INSTALADO (C:/Program Files/OpenToonz/opentoonz.exe,
+      de abril, sem pasta aiassist), e o painel AI Assist so existe no nosso build
+      (toonz/build/Release/OpenToonz.exe, de hoje). O grant e por caminho de executavel e nao
+      ha como aponta-lo para um binario de desenvolvimento, entao a janela do nosso build vem
+      mascarada no screenshot e nao aceita clique. O build foi lancado e deixado aberto e em
+      foco para o usuario conferir. Previsao registrada para ele comparar, calculada do
+      criterio steps maior que 0 e menor ou igual a 8 em graphtemplate.h:72: Live habilitado em
+      sd15_scribble_img2img (4), sd15_scribble_txt2img (4), sdxl_lightning_t2i (8) e
+      sdxl_lightning_cnet (8); desabilitado em sd15_cfg_txt2img (25), sdxl_base_t2i (28) e
+      sdxl_base_cnet (28). O denoise nao afeta esse criterio, que so olha steps.
+    - p5-s3 OK. Secao 7 "Veredito" escrita no aiassist__sdxl_notes.md, com a resposta por rota,
+      a tabela da varredura, as correcoes as secoes 2, 3 e 5 deste mesmo documento, e o registro
+      de onde os pesos ficaram e como recriar o yaml.
+    - p5-s2 OK, verificado pelo usuario na interface e comprovado por cinco capturas de tela
+      (a unica via possivel: o grant do computer-use resolve para o OpenToonz instalado, e o
+      painel so existe no nosso build). O observado bate com a previsao nos cinco casos:
+        combo Graph lista os SETE templates, na ordem alfabetica esperada. Isso prova que o
+          painel encontra os arquivos em applicationDirPath()/aiassist/graphs.
+        sdxl_lightning_cnet e sdxl_lightning_t2i (8 passos) -> rotulo "Live: regenerate as I
+          type" em preto, habilitado.
+        sdxl_base_cnet e sdxl_base_t2i (28 passos) -> mesmo rotulo em cinza, desabilitado.
+        sd15_cfg_txt2img (25 passos) -> tambem cinza, coerente com o mesmo criterio.
+      Confirma que a edicao de denoise do p5-s1 nao afetou o criterio de Live, que so le steps.
+    - p5-s4 OK, via xml-knowledge-indexer. Status previo saudavel: 21 arquivos, 485 chunks.
+      Sync com --paths aiassist__sdxl_notes.md.
+
+    Knowledge index sync:
+    - backend: sqlite-vec
+    - schema_version: 1
+    - added: 1
+    - updated: 0
+    - removed: 0
+    - receipt_ts: 2026-09-03T22:03:58Z
+    Observacao: o recibo contou como "added" um arquivo que ja estava indexado; e como a
+    implementacao contabiliza um re-embed, nao um indicio de duplicata. Caminho de leitura
+    verificado depois do sync com uma query real ("veredito SDXL modo ao vivo vale a pena
+    nesta maquina"): a secao 7 recem-escrita voltou como primeiro resultado, stale_dropped 0.
+    Gravar sem conferir a leitura nao provaria nada.
+
+    Follow-ups (fora do escopo desta task; viram task propria):
+    - "Live: regenerate as I draw" - pedido do usuario em 2026-09-03, durante o gate do p5.
+      Hoje o gatilho do modo ao vivo e QLineEdit::textEdited no prompt. O pedido e disparar
+      tambem quando o DESENHO muda.
+      Viabilidade (levantada, nao implementada): a maior parte da maquinaria ja existe.
+        * o painel ja captura o desenho corrente (currentFrameAsPngBase64, atras do
+          m_useReferenceCheck);
+        * o debounce de 300 ms, o maybeGenerateLive e o coalesceLive ja existem;
+        * o painel ja conecta em TXshLevelHandle, mas em xshLevelSwitched (troca de nivel).
+        * o sinal de mudanca de CONTEUDO existe: TXshLevelHandle::xshLevelChanged(),
+          em toonz/sources/include/toonz/txshlevelhandle.h:47.
+      Ou seja, e uma conexao a mais, analoga a que ja existe para o texto.
+      NAO feito aqui porque esta task proibe alterar C++ do painel (ver Restricoes).
+      O que a medicao desta task diz sobre o pedido: so vale na rota SD 1.5, que faz 1,2 s.
+      Com SDXL Lightning a 5,8 s o redesenho enfileiraria geracoes que o usuario nunca alcanca.
+      Questoes de design que a task nova precisa resolver:
+        1. 300 ms e curto demais para desenho - pausa entre tracos nao e pausa entre palavras;
+        2. cada disparo rasteriza e converte o frame para base64, custo que o gatilho por
+           texto nao tinha;
+        3. laco: "Insert as Level" altera o nivel, emite xshLevelChanged, dispara outra
+           geracao - precisa de guarda;
+        4. isLiveCapable() hoje e steps menor ou igual a 8; com os numeros desta task da para torna-lo
+           temporal em vez de por passos.
+
+    Next:
+    - Gate do p5, pendente de decisao do usuario.
+
+    Artifacts:
+    - tasks/sdxl_setup.xml (este plano)
+    - tools/testdata/scribble_house_1024.png (referencia de teste, p3-s1)
+    - C:\ProgramData\CreatorSpaceFramework\ComfyUI\ComfyUI\extra_model_paths.yaml (novo)
+    - C:\AI\comfy-models\{checkpoints,loras,controlnet} (pesos SDXL, fora da arvore gerenciada)
+  </notes>
+
+  <agents>
+    <agent name="xml-autonomous-guide" role="guidance" />
+    <agent name="xml-autonomous-approver" role="approver" />
+    <agent name="xml-knowledge-indexer" role="indexer" />
+  </agents>
+
+  <input>
+    <file path="tasks/knowledge/aiassist__sdxl_notes.md">Orcamento, downloads e tabela de medicao a preencher.</file>
+    <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato da API e dos marcadores.</file>
+    <file path="tools/aiassist_oracle.py">Cliente de linha de comando; valida e gera sem abrir o OpenToonz.</file>
+    <folder path="toonz/sources/aiassist/graphs">Os quatro templates SDXL e os tres SD 1.5.</folder>
+  </input>
+
+  <phases>
+
+    <phase id="p1" status="completed">
+      <description>Reconhecimento. Descobrir onde o ComfyUI vive, o que ja tem instalado e onde os pesos novos devem ir, antes de baixar qualquer coisa.</description>
+      <steps>
+        <step id="p1-s1" tag="verify" status="completed">Confirmar que o ComfyUI responde: GET /system_stats em 127.0.0.1:8188. Registrar versao, dispositivo e VRAM total relatada.</step>
+        <step id="p1-s2" tag="research" status="completed">Localizar a instalacao. Procurar no disco pelo arquivo que sabemos existir, DreamShaper_8_pruned.safetensors; a pasta models/ que o contem e a raiz de modelos ativa.</step>
+        <step id="p1-s3" tag="research" status="completed">Listar o inventario real via GET /object_info/CheckpointLoaderSimple, /object_info/LoraLoader e /object_info/ControlNetLoader. Anotar exatamente os nomes aceitos hoje.</step>
+        <step id="p1-s4" tag="verify" status="completed">Conferir espaco livre no volume da pasta de modelos. Precisa de folga sobre ~9 GB.</step>
+        <step id="p1-s5" tag="ask_for_guidance" status="completed">Decidir onde instalar: dentro da pasta gerenciada pelo servico da Acer, ou numa pasta propria referenciada por extra_model_paths.yaml. Pesar risco de perda numa atualizacao contra complexidade de configuracao. Registrar a escolha e o porque.</step>
+      </steps>
+      <input>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Orcamento de VRAM e nomes de arquivo esperados.</file>
+      </input>
+      <output>
+        <file path="tasks/sdxl_setup.xml">Inventario, espaco livre e decisao de local de instalacao registrados em root notes.</file>
+      </output>
+      <review status="completed">ComfyUI vivo e identificado (v0.2.6, cuda:0 RTX 5070 Laptop, 8123 MiB); raiz de modelos localizada pela argv do proprio servidor e confirmada pela presenca do DreamShaper; inventario lido do /object_info e nao suposto; 306 GB livres contra ~9 GB necessarios; local de instalacao decidido pelo usuario com justificativa registrada. Nenhum arquivo foi criado ou movido nesta fase.</review>
+      <approval required_by="user" status="approved">Aprovado pelo usuario, 2026-09-03. O gate do p1 e a decisao de onde instalar e o aval para baixar; o usuario respondeu as tres perguntas do p1-s5 escolhendo pasta externa + extra_model_paths.yaml, POST /free no lugar de reiniciar o servico, e os quatro downloads.</approval>
+    </phase>
+
+    <phase id="p2" status="completed">
+      <description>Downloads. Quatro arquivos, com os nomes que os templates esperam.</description>
+      <steps>
+        <step id="p2-s1" tag="use_tool" status="completed">Baixar o checkpoint SDXL base 1.0 para models/checkpoints como sd_xl_base_1.0.safetensors.</step>
+        <step id="p2-s2" tag="use_tool" status="completed">Baixar a LoRA SDXL-Lightning de 8 passos para models/loras como sdxl_lightning_8step_lora.safetensors.</step>
+        <step id="p2-s3" tag="use_tool" status="completed">Baixar o T2I-Adapter sketch para SDXL para models/controlnet como t2i-adapter_diffusers_xl_sketch.safetensors.</step>
+        <step id="p2-s4" tag="use_tool" status="completed">Baixar um ControlNet SDXL de scribble ou sketch para models/controlnet como controlnet-sdxl-scribble.safetensors.</step>
+        <step id="p2-s5" tag="verify" status="completed">Reiniciar o ComfyUI e reconsultar /object_info. Os quatro nomes precisam aparecer EXATAMENTE como os templates os escrevem. Renomear o arquivo baixado e preferivel a editar quatro grafos - mas se preferir editar, edite tambem as copias em toonz/build/*/aiassist/graphs.</step>
+      </steps>
+      <input>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Secao 4: tabela de pasta e nome de arquivo.</file>
+      </input>
+      <output>
+        <folder path="toonz/sources/aiassist/graphs">Templates inalterados se os nomes baterem; ajustados se nao.</folder>
+      </output>
+      <review status="completed">Os quatro pesos foram baixados de repositorios oficiais (URLs conferidas por HEAD antes de gastar banda) e verificados alem do tamanho: o header safetensors de cada arquivo fecha exatamente com o tamanho em disco. Ficaram fora da arvore gerenciada, em C:\AI\comfy-models, expostos por extra_model_paths.yaml - o mecanismo que o usuario escolheu. Apos o reboot, /object_info lista os quatro nomes EXATAMENTE como os quatro templates os escrevem, entao nenhum grafo precisou ser editado e nada foi copiado para as pastas de build. Os tres modelos SD 1.5 pre-existentes continuam listados: a restricao de nao quebrar os grafos sd15_* esta cumprida.</review>
+      <approval required_by="user" status="approved">Aprovado pelo usuario, 2026-09-03 18:10. Liberado gastar GPU no p3 gerando com os quatro templates.</approval>
+    </phase>
+
+    <phase id="p3" status="completed">
+      <description>Validacao funcional. Cada template precisa produzir uma imagem pelo oraculo antes de qualquer medicao.</description>
+      <steps>
+        <step id="p3-s1" tag="create_file" status="completed">Criar uma imagem de referencia de teste: um rabisco preto sobre branco, 1024x1024 PNG, para alimentar --reference. Guardar em tools/ ou em pasta temporaria, nao dentro de graphs/.</step>
+        <step id="p3-s2" tag="verify" status="completed">Rodar aiassist_oracle.py com --dry-run nos quatro templates. Isso valida marcadores e patch sem gastar GPU. Corrigir o que ele apontar.</step>
+        <step id="p3-s3" tag="verify" status="completed">Gerar de verdade com os quatro, mesmo prompt e mesma seed, usando --reference. Guardar os quatro PNG lado a lado para comparacao visual.</step>
+        <step id="p3-s4" tag="fix" status="completed">Se o ComfyUI recusar algum grafo, ler a mensagem: ela nomeia o no e o campo. Causas provaveis, em ordem: nome de arquivo diferente do esperado; classe de no ausente porque o custom node nao esta instalado; valor de sampler_name ou scheduler que esta build nao conhece. Corrigir no template e recopiar para as duas pastas de build.</step>
+      </steps>
+      <input>
+        <file path="tools/aiassist_oracle.py">Cliente de linha de comando para validar e gerar.</file>
+        <folder path="toonz/sources/aiassist/graphs">Os quatro templates SDXL.</folder>
+      </input>
+      <output>
+        <folder path="toonz/sources/aiassist/graphs">Templates SDXL corrigidos, se preciso.</folder>
+      </output>
+      <review status="completed">Os quatro templates SDXL geram de ponta a ponta pelo oraculo, na primeira tentativa e sem nenhuma recusa do ComfyUI, com prompt, seed, negativo e referencia identicos. O dry-run validou os marcadores antes de gastar GPU e o pre-voo tinha descartado custom node ausente e sampler/scheduler invalido. Nenhum grafo foi editado, logo nada precisou ser recopiado para as pastas de build, e nenhum .cpp ou .h do painel foi tocado. Ressalva registrada e levada ao p5, nao escondida: as quatro saidas ficam presas ao rabisco de entrada porque o mesmo desenho condiciona por dois caminhos (VAEEncode com denoise 0.75 e ControlNetApply com strength 1.0). Isso e calibragem, nao defeito, e o p4 deve medir os templates como estao hoje para que a medicao continue comparavel.</review>
+      <approval required_by="user" status="approved">Aprovado pelo usuario, 2026-09-03 18:25. Escolha explicita de medir os templates com os parametros atuais, para que os cinco numeros fiquem comparaveis e o p5-s1 tenha linha de base.</approval>
+    </phase>
+
+    <phase id="p4" status="completed">
+      <description>Medicao. E o motivo desta task existir: sem numero proprio nao da para escolher rota.</description>
+      <steps>
+        <step id="p4-s1" tag="verify" status="completed">Para cada template: reiniciar o ComfyUI, gerar duas vezes com o mesmo prompt e seed, anotar o tempo da SEGUNDA (a primeira paga o carregamento do modelo) e o pico de VRAM durante ela.</step>
+        <step id="p4-s2" tag="verify" status="completed">Medir tambem sd15_scribble_img2img nas mesmas condicoes, como base de comparacao.</step>
+        <step id="p4-s3" tag="document" status="completed">Preencher a tabela da secao 5 de aiassist__sdxl_notes.md com os cinco resultados e uma observacao por linha (houve offload? saida lavada? erro?).</step>
+      </steps>
+      <input>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Secao 5: roteiro de medicao e tabela em branco.</file>
+      </input>
+      <output>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Tabela de medicao preenchida com numeros reais desta maquina.</file>
+      </output>
+      <review status="completed">Os cinco templates foram medidos nesta maquina, com reinicio real do ComfyUI antes de cada um e duas geracoes medidas por linha, nao uma. Os numeros sao reproduziveis e a execucao real esta comprovada por hash distinto de cada PNG e por 24 a 146 amostras de VRAM por geracao. O metodo escrito no p4-s1 teve de ser corrigido durante a execucao - com a mesma seed o ComfyUI devolve do cache em 0,2 s e nao mede nada - e a correcao esta registrada em detalhe nas notas e na propria secao 5 do sdxl_notes, para quem ler a tabela depois saber como ela foi levantada. A tabela em branco foi substituida pelos cinco resultados com uma observacao analitica por linha, incluindo a quantificacao do offload no base_cnet (+37% sobre o previsto por um modelo linear ajustado nas linhas que nao saturam a placa).</review>
+      <approval required_by="user" status="approved">Aprovado pelo usuario, 2026-09-03 18:55. A correcao de metodo do p4-s1 (seeds diferentes nas geracoes medidas) foi explicitamente validada como a leitura correta da intencao do passo.</approval>
+    </phase>
+
+    <phase id="p5" status="completed">
+      <description>Ajuste e veredito. Transformar as medicoes em decisao registrada.</description>
+      <steps>
+        <step id="p5-s1" tag="edit_file" status="completed">Ajustar os parametros que a secao 6 do sdxl_notes marca como chute inicial - denoise 0.75, cfg 1.5 do Lightning, scheduler sgm_uniform - com base no que as imagens mostraram. Uma mudanca por vez, anotando o efeito.</step>
+        <step id="p5-s2" tag="verify" status="completed" assignee="user">Confirmar no painel do OpenToonz que os templates aparecem no combo Graph e que o checkbox Live fica habilitado nos lightning (8 passos) e desabilitado nos base (28). Isso e o unico passo que precisa da interface.</step>
+        <step id="p5-s3" tag="document" status="completed">Escrever no sdxl_notes um veredito curto: qual template usar para explorar, qual para finalizar, e se o SDXL vale a pena nesta maquina frente ao SD 1.5 que ja funciona. Se nao valer, dizer isso - a resposta negativa tambem e resultado.</step>
+        <step id="p5-s4" tag="sync_knowledge_index" status="completed" assignee="xml-knowledge-indexer">Reconciliar o indice com o sdxl_notes atualizado.</step>
+      </steps>
+      <input>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Tabela preenchida no p4 e secao 6 (parametros a ajustar).</file>
+      </input>
+      <output>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Veredito registrado.</file>
+      </output>
+      <review status="completed">Os tres criterios do gate foram conferidos um a um. (1) As medicoes sao desta maquina: cada linha veio de um reinicio real do ComfyUI local, duas geracoes medidas, amostragem de nvidia-smi a 200 ms, e os dados crus estao em tools/testdata/p4/medicoes.json. Nada foi copiado de tabela alheia - ao contrario, a medicao CORRIGIU duas afirmacoes deste repositorio: o roteiro da secao 5, cujo metodo devolvia cache, e a secao 3, que supunha offload garantido pelo ControlNet. (2) Os quatro templates geram pelo oraculo, antes do ajuste (p3-s3) e depois dele (dry-run nos quatro mais uma geracao real do sdxl_base_cnet ja editado). (3) Nenhum .cpp ou .h do painel foi alterado: as unicas edicoes no repositorio foram o campo denoise dos quatro JSON SDXL e suas copias de build, mais os arquivos de conhecimento e este plano. Alem do exigido: o p5-s2 foi verificado na interface real pelo usuario, com capturas, e os tres sd15_* continuam intactos.</review>
+      <approval required_by="user" status="approved">Aprovado pelo usuario, 2026-09-03 19:20. Task encerrada. O pedido de "Live: regenerate as I draw", levantado durante este gate, foi registrado no ledger de Follow-ups e vira task propria - nao foi tratado aqui porque exigiria alterar C++ do painel, o que esta task proibe.</approval>
+    </phase>
+
+  </phases>
+</task>

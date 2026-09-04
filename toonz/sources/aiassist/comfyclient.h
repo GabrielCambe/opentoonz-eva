@@ -15,7 +15,8 @@ class QTimer;
 //!
 //! Ciclo: POST /prompt -> polling GET /history/<id> -> GET /view.
 //! Nao gerencia o servidor e nao assume onde ele esta: a URL vem de fora.
-//! Falha de conexao emite failed() com a URL na mensagem — nunca retry silencioso.
+//! Falha de conexao emite failed() com a URL na mensagem — nunca retry
+//! silencioso.
 class ComfyClient final : public QObject {
   Q_OBJECT
 

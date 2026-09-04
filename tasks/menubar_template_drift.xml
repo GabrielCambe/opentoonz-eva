@@ -1,0 +1,124 @@
+<task id="menubar-template-drift" status="pending">
+  <description>
+    Corrigir a divergencia entre os comandos de menu registrados no codigo C++ do fork
+    opentoonz-eva e os arquivos XML de menubar que o aplicativo realmente carrega em tempo de
+    execucao. Comandos adicionados ao codigo depois que um roomN_menubar.xml foi gerado ficam
+    invisiveis: addMenuItem() e loadMenuBar() descartam silenciosamente qualquer comando que nao
+    exista, e o inverso tambem vale - o XML pessoal do usuario nunca ganha comandos novos. Hoje
+    cinco itens do menu Windows estao nessa situacao. Escopo: descobrir a lista completa (nao so
+    o menu Windows), sincronizar os templates versionados no repositorio, dar ao usuario um
+    caminho para atualizar o XML pessoal dele sem perder customizacoes, e deixar uma checagem que
+    impeca a divergencia de voltar.
+  </description>
+
+  <notes>
+    Task profile: fix
+    Risk level: low
+    Execution mode: governed-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Design guidance: pending
+    Knowledge index: enabled
+    Knowledge index backend: sqlite-vec
+
+    Origem: descoberto em 2026-09-03 durante a task aiassist-comfyui-panel. O item AI Assist nao
+    aparecia no menu Windows apesar de estar registrado em mainwindow.cpp e adicionado em
+    menubar.cpp. A investigacao mostrou que o menu exibido nao vinha de createFullMenuBar().
+
+    Mecanica confirmada (nao re-investigar, so validar):
+    - mainwindow.cpp ~l.675 chama stackedMenuBar->loadAndAddMenubar(ToonzFolder::getRoomsFile(
+      "&lt;room&gt;_menubar.xml")) para cada room carregado.
+    - ToonzFolder::getRoomsFile (toonzlib/toonzfolders.cpp ~l.191) procura primeiro em
+      getMyRoomsDir() (perfil pessoal) e cai para getTemplateRoomsDir() (stuff versionado).
+    - StackedMenuBar::loadMenuBar (menubar.cpp ~l.264) le o XML; para cada &lt;command&gt; faz
+      CommandManager::getAction(id) e ignora em silencio o que nao existir.
+    - createFullMenuBar() (menubar.cpp ~l.1123) e apenas o fallback de quando nenhum XML e achado.
+    - StackedMenuBar::addMenuItem (menubar.cpp) tambem retorna cedo se a QAction nao existir.
+    - O stuff dir em tempo de execucao vem do registro no Windows (tenv.cpp getStuffDir ->
+      m_registryRoot + TOONZROOT). Nesta maquina resolve para "C:\OpenToonz stuff", e o XML ativo
+      e C:\OpenToonz stuff\profiles\layouts\personal\Default.almei\roomN_menubar.xml.
+
+    Evidencia da divergencia atual (menu Windows, comparando codigo x tela):
+    - MI_OpenBrushPresetPanel        mainwindow.cpp ~l.2766   ausente do menu
+    - MI_OpenToolPropertiesPanel     mainwindow.cpp ~l.2769   ausente do menu
+    - MI_OpenLocator                 mainwindow.cpp ~l.2798   ausente do menu
+    - MI_OpenInfiniteBackgroundPanel mainwindow.cpp ~l.2801   ausente do menu
+    - MI_OpenAIAssistPanel           mainwindow.cpp ~l.2753   ausente do menu
+
+    Ja feito fora desta task (nao repetir): MI_OpenAIAssistPanel foi adicionado a
+    stuff/profiles/layouts/rooms/Default/menubar_template.xml.
+
+    Restricao de ambiente: o agente executor alcanca o repositorio pelo folder conectado, mas
+    "C:\OpenToonz stuff" esta FORA dele. Qualquer passo que toque o perfil pessoal do usuario
+    exige device_request_folder_access aprovado por ele, ou vira assignee="user".
+
+    Nao confundir dois problemas diferentes que produzem o mesmo sintoma:
+    (a) comando existe no codigo mas nao no XML  -> esta task
+    (b) comando existe no XML mas nao no codigo  -> lixo de versoes antigas, tambem vale limpar
+  </notes>
+
+  <agents>
+    <agent name="xml-autonomous-guide" role="guidance" />
+    <agent name="xml-autonomous-approver" role="approver" />
+    <agent name="xml-knowledge-indexer" role="indexer" />
+  </agents>
+
+  <input>
+    <file path="toonz/sources/toonz/mainwindow.cpp">defineActions(): fonte de verdade dos comandos registrados.</file>
+    <file path="toonz/sources/toonz/menubar.cpp">loadMenuBar, addMenuItem e createFullMenuBar.</file>
+    <file path="toonz/sources/toonz/menubarcommandids.h">IDs de comando.</file>
+    <file path="toonz/sources/toonzlib/toonzfolders.cpp">Resolucao de getRoomsFile e getMyRoomsDir.</file>
+    <file path="toonz/sources/common/tapptools/tenv.cpp">Resolucao do stuff dir a partir do registro.</file>
+    <folder path="stuff/profiles/layouts/rooms">Templates de menubar versionados (Default e StudioGhibli).</folder>
+  </input>
+
+  <phases>
+
+    <phase id="p1" status="pending">
+      <description>Levantamento. Produzir a lista completa e verificavel da divergencia, em vez de trabalhar com os cinco itens observados a olho.</description>
+      <steps>
+        <step id="p1-s1" tag="create_file" status="pending">Escrever tools/menubar_audit.py (stdlib apenas): extrai de mainwindow.cpp todos os IDs passados a createMenuWindowsAction/createMenuAction/createAction e de menubarcommandids.h todos os #define MI_*; extrai de cada XML em stuff/profiles/layouts/rooms/**/*.xml os &lt;command&gt;; imprime dois conjuntos - no codigo mas nao no XML, e no XML mas nao no codigo - por arquivo.</step>
+        <step id="p1-s2" tag="verify" status="pending">Rodar o audit e conferir que ele reencontra os cinco itens ja conhecidos do menu Windows. Se nao reencontrar, o parser esta errado, nao o codigo.</step>
+        <step id="p1-s3" tag="document" status="pending">Escrever tasks/knowledge/opentoonz__menubar_resolution.md: a cadeia room -> getRoomsFile -> perfil pessoal ou template -> loadMenuBar, o descarte silencioso nos dois pontos, onde fica o stuff dir e por que editar o C++ nao muda o menu de quem ja tem XML pessoal.</step>
+      </steps>
+      <output>
+        <file path="tools/menubar_audit.py">Auditor de divergencia codigo x XML.</file>
+        <file path="tasks/knowledge/opentoonz__menubar_resolution.md">Como o OpenToonz resolve a barra de menus.</file>
+      </output>
+    </phase>
+
+    <phase id="p2" status="pending">
+      <description>Sincronizar os templates versionados no repositorio. Estes sao os que valem para instalacoes novas do fork e para quem nao tem XML pessoal.</description>
+      <steps>
+        <step id="p2-s1" tag="edit_file" status="pending">Para cada arquivo em stuff/profiles/layouts/rooms/**/ (menubar_template.xml e roomN_menubar.xml), inserir os comandos ausentes na posicao equivalente a que ocupam em createFullMenuBar(), preservando separadores e a ordem existente.</step>
+        <step id="p2-s2" tag="edit_file" status="pending">Remover dos mesmos arquivos os comandos que nao existem mais no codigo, se o audit apontar algum. Registrar cada remocao com o motivo.</step>
+        <step id="p2-s3" tag="verify" status="pending">Rodar o audit de novo: o conjunto "no codigo mas nao no XML" deve ficar vazio para todos os arquivos versionados.</step>
+      </steps>
+      <output>
+        <folder path="stuff/profiles/layouts/rooms">Templates sincronizados com o codigo.</folder>
+      </output>
+    </phase>
+
+    <phase id="p3" status="pending">
+      <description>Perfil pessoal do usuario. O XML que a instalacao dele realmente carrega vive fora do repositorio e pode conter customizacoes que ele quer manter.</description>
+      <steps>
+        <step id="p3-s1" tag="ask_for_guidance" status="pending">Decidir entre: (a) o usuario usar Customize Menu Bar na propria UI, room por room; (b) pedir device_request_folder_access em "C:\OpenToonz stuff\profiles\layouts" e o agente aplicar o mesmo patch do p2 nos arquivos pessoais, com backup antes; (c) apagar o XML pessoal para cair no template do p2, perdendo customizacoes. Levar em conta que existem quatro perfis na maquina (Default.almei, Default.cambeh, Default.gabriel, Default.User) e que so o do usuario importa.</step>
+        <step id="p3-s2" tag="edit_file" status="pending">Executar o caminho escolhido. Se envolver escrita fora do repositorio, fazer copia .bak datada de cada arquivo antes de tocar nele.</step>
+        <step id="p3-s3" tag="verify" status="pending" assignee="user">Abrir o OpenToonz e confirmar no menu Windows a presenca de Brush Presets, Tool Properties, Locator, Infinite Background e AI Assist.</step>
+      </steps>
+    </phase>
+
+    <phase id="p4" status="pending">
+      <description>Prevencao. Sem isso a divergencia volta no proximo comando adicionado ao fork.</description>
+      <steps>
+        <step id="p4-s1" tag="create_file" status="pending">Transformar tools/menubar_audit.py em checagem com codigo de saida diferente de zero quando houver divergencia nos arquivos versionados, com uma allowlist explicita para comandos intencionalmente fora de algum menu.</step>
+        <step id="p4-s2" tag="document" status="pending">Documentar em tasks/knowledge/opentoonz__menubar_resolution.md o procedimento de adicionar um comando novo ao fork: registrar em defineActions, adicionar em createFullMenuBar, adicionar nos templates XML, rodar o audit.</step>
+        <step id="p4-s3" tag="sync_knowledge_index" status="pending" assignee="xml-knowledge-indexer">Indexar o conhecimento novo.</step>
+      </steps>
+      <output>
+        <file path="tools/menubar_audit.py">Checagem reutilizavel.</file>
+      </output>
+    </phase>
+
+  </phases>
+</task>

@@ -17,9 +17,10 @@ bool GraphTemplate::index(QString &errorOut) {
   m_nodeByTitle.clear();
   for (auto it = m_graph.begin(); it != m_graph.end(); ++it) {
     const QJsonObject node = it.value().toObject();
-    const QString title =
-        node.value(QStringLiteral("_meta")).toObject()
-            .value(QStringLiteral("title")).toString();
+    const QString title    = node.value(QStringLiteral("_meta"))
+                              .toObject()
+                              .value(QStringLiteral("title"))
+                              .toString();
     if (!title.startsWith(QStringLiteral("AI_"))) continue;
     if (m_nodeByTitle.contains(title)) {
       errorOut = QObject::tr("duplicated title %1").arg(title);
@@ -32,7 +33,8 @@ bool GraphTemplate::index(QString &errorOut) {
     if (!m_nodeByTitle.contains(QString::fromLatin1(req)))
       missing << QString::fromLatin1(req);
   if (!missing.isEmpty()) {
-    errorOut = QObject::tr("missing %1").arg(missing.join(QStringLiteral(", ")));
+    errorOut =
+        QObject::tr("missing %1").arg(missing.join(QStringLiteral(", ")));
     return false;
   }
   return true;
@@ -65,9 +67,8 @@ QVector<GraphTemplate> GraphTemplate::scanFolder(const QString &folder,
                                                  QStringList &rejectedOut) {
   QVector<GraphTemplate> result;
   QDir dir(folder);
-  const QStringList files =
-      dir.entryList(QStringList() << QStringLiteral("*.json"), QDir::Files,
-                    QDir::Name);
+  const QStringList files = dir.entryList(
+      QStringList() << QStringLiteral("*.json"), QDir::Files, QDir::Name);
   for (const QString &file : files) {
     GraphTemplate tpl;
     QString err;
@@ -90,10 +91,8 @@ bool GraphTemplate::referenceScaleTarget(int &widthOut, int &heightOut) const {
     // da para saber qual esta na cadeia da referencia sem percorrer os links,
     // e uma linha de status errada e pior que nenhuma.
     for (auto it = m_graph.constBegin(); it != m_graph.constEnd(); ++it) {
-      const QString cls = it.value()
-                              .toObject()
-                              .value(QStringLiteral("class_type"))
-                              .toString();
+      const QString cls =
+          it.value().toObject().value(QStringLiteral("class_type")).toString();
       if (cls != QLatin1String("ImageScale")) continue;
       if (!scaleId.isEmpty()) return false;  // ambiguo
       scaleId = it.key();

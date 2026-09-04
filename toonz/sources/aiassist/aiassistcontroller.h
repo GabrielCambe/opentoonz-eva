@@ -67,8 +67,8 @@ private:
   //! Hoje sao duas: o fim de um traco (TXshLevelHandle::xshLevelChanged) e o
   //! undo/redo (TUndoManager::historyChanged). Desfazer nao emite o primeiro -
   //! ToolUtils::TToolUndo::notifyImageChanged() so invalida icone e atualiza a
-  //! ferramenta, sem notificar o level handle -, e sem o segundo um Ctrl+Z ficava
-  //! sem regenerar. Ver SC7 no Intent Brief.
+  //! ferramenta, sem notificar o level handle -, e sem o segundo um Ctrl+Z
+  //! ficava sem regenerar. Ver SC7 no Intent Brief.
   void onDrawingChanged();
 
   //! Redesenha o statusLabel com o quadro atual do indicador. Chamado pelo
@@ -88,8 +88,8 @@ private:
 
   //! Verdadeiro quando o desenho corrente e um resultado que este painel
   //! inseriu (aiassist_NNNN.png). Serve para nao realimentar o gerador com a
-  //! propria saida: depois de Insert as Level a coluna corrente passa a ser a do
-  //! PNG gerado, e a referencia sai justamente da coluna corrente.
+  //! propria saida: depois de Insert as Level a coluna corrente passa a ser a
+  //! do PNG gerado, e a referencia sai justamente da coluna corrente.
   bool currentLevelIsGenerated() const;
 
   //! Frame corrente como PNG em base64. Vazio se nao houver imagem raster.
@@ -124,12 +124,12 @@ private:
   //! o Live ligado - com ele desligado a lambda ja retornou antes.
   //!
   //! Existe porque a coalescencia era chaveada so no texto do prompt, e
-  //! desenhando o prompt nao muda entre geracoes: sem isto, desenhar durante uma
-  //! geracao em voo seria perdido em silencio. Um serial e nao um hash da
+  //! desenhando o prompt nao muda entre geracoes: sem isto, desenhar durante
+  //! uma geracao em voo seria perdido em silencio. Um serial e nao um hash da
   //! referencia porque comparar hashes exigiria rasterizar e recodificar o
   //! desenho a cada fim de ciclo, no caminho comum aos dois gatilhos, para
   //! responder o que o proprio sinal ja responde. Ver D6 no design.
-  quint64 m_drawSerial          = 0;
+  quint64 m_drawSerial = 0;
   //! O valor de m_drawSerial no instante da ultima submissao, do mesmo jeito
   //! que m_submittedPrompt guarda o texto submetido.
   quint64 m_submittedDrawSerial = 0;

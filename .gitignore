@@ -40,7 +40,13 @@ ipch/
 .DS_Store
 
 #ai
-tasks/
+# Os planos XML e o conhecimento em tasks/ sao versionados de proposito: sao o
+# registro de por que o codigo ficou como ficou. O que fica de fora e so o que e
+# regeneravel ou pesado demais.
+tasks/utils/
+tasks/knowledge/.index/
+tasks/.xtv-runs/
+tasks/*.bak-*
 
 # build
 toonz/build/

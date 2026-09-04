@@ -13,7 +13,7 @@
 namespace {
 const int kPollIntervalMs = 500;
 const int kTimeoutMs      = 300000;  // 5 min
-}
+}  // namespace
 
 //-----------------------------------------------------------------------------
 
@@ -38,7 +38,7 @@ void ComfyClient::fail(const QString &message) {
 void ComfyClient::finish() {
   ++m_generation;  // invalida respostas ainda em voo deste ciclo
   m_pollTimer->stop();
-  m_busy      = false;
+  m_busy = false;
   m_promptId.clear();
   m_elapsedMs = 0;
 }
@@ -97,9 +97,8 @@ void ComfyClient::onSubmitFinished() {
     return;
   }
 
-  const QJsonObject obj =
-      QJsonDocument::fromJson(reply->readAll()).object();
-  m_promptId = obj.value(QStringLiteral("prompt_id")).toString();
+  const QJsonObject obj = QJsonDocument::fromJson(reply->readAll()).object();
+  m_promptId            = obj.value(QStringLiteral("prompt_id")).toString();
   if (m_promptId.isEmpty()) {
     fail(tr("ComfyUI did not return a prompt_id."));
     return;
@@ -135,7 +134,7 @@ void ComfyClient::onHistoryFinished() {
   if (reply->property("aiGeneration").toULongLong() != m_generation) return;
   if (reply->error() != QNetworkReply::NoError) return;  // tenta de novo
 
-  const QJsonObject hist = QJsonDocument::fromJson(reply->readAll()).object();
+  const QJsonObject hist  = QJsonDocument::fromJson(reply->readAll()).object();
   const QJsonObject entry = hist.value(m_promptId).toObject();
   if (entry.isEmpty()) return;
 
@@ -169,9 +168,9 @@ void ComfyClient::onHistoryFinished() {
                  ref.value(QStringLiteral("filename")).toString());
   q.addQueryItem(QStringLiteral("subfolder"),
                  ref.value(QStringLiteral("subfolder")).toString());
-  q.addQueryItem(QStringLiteral("type"),
-                 ref.value(QStringLiteral("type")).toString(
-                     QStringLiteral("temp")));
+  q.addQueryItem(
+      QStringLiteral("type"),
+      ref.value(QStringLiteral("type")).toString(QStringLiteral("temp")));
   QUrl url(m_baseUrl + QStringLiteral("/view"));
   url.setQuery(q);
 

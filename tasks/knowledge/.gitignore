@@ -1,0 +1,2 @@
+﻿# local vector index - per-checkout build artifact, never commit
+.index/

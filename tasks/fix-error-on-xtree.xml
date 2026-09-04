@@ -1,0 +1,29 @@
+<task id="fix-error-on-xtree" status="pending">
+    <description>TODO: describe this task.</description>
+    <input></input>
+    <phases>
+        <phase id="phase-1" status="pending">
+            <description>TODO: describe phase 1.</description>
+            <input></input>
+            <steps>
+                <step id="phase-1-s1" tag="analyze" status="pending">TODO: first step of phase 1.</step>
+            </steps>
+            <output></output>
+            <review status="pending"></review>
+            <approval required_by="ai-approver" status="pending"></approval>
+        </phase>
+    </phases>
+    <output></output>
+    <notes>
+        Task profile: debug
+        Risk level: low
+        Execution mode: governed-xml
+        Execution autonomy: autonomous
+        Approval mode: autonomous-gated
+        Delivery mode: single-pass
+        Validation policy: standard
+        Design guidance: pending
+        Knowledge index: enabled
+        Knowledge index backend: sqlite-vec
+    </notes>
+</task>
