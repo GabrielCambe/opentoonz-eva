@@ -2750,6 +2750,7 @@ void MainWindow::defineActions() {
   createMenuWindowsAction(MI_OpenStopMotionPanel,
                           QT_TR_NOOP("&Stop Motion Controls"), "");
 #endif
+  createMenuWindowsAction(MI_OpenAIAssistPanel, QT_TR_NOOP("&AI Assist"), "");
   createMenuWindowsAction(MI_OpenLevelView, QT_TR_NOOP("&Viewer"), "",
                           "viewer");
   createMenuWindowsAction(MI_OpenXshView, QT_TR_NOOP("&Xsheet"), "", "xsheet");

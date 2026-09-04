@@ -1,0 +1,30 @@
+{
+  "1":  { "class_type": "CheckpointLoaderSimple", "_meta": { "title": "Load Checkpoint" },
+          "inputs": { "ckpt_name": "DreamShaper_8_pruned.safetensors" } },
+
+  "33": { "class_type": "LoraLoader", "_meta": { "title": "Load LoRA" },
+          "inputs": { "lora_name": "pytorch_lora_weights.safetensors",
+                      "strength_model": 1.0, "strength_clip": 1.0,
+                      "model": ["1", 0], "clip": ["1", 1] } },
+
+  "2":  { "class_type": "CLIPTextEncode", "_meta": { "title": "AI_PROMPT" },
+          "inputs": { "text": "", "clip": ["33", 1] } },
+
+  "3":  { "class_type": "CLIPTextEncode", "_meta": { "title": "AI_NEGATIVE" },
+          "inputs": { "text": "", "clip": ["33", 1] } },
+
+  "29": { "class_type": "EmptyLatentImage", "_meta": { "title": "Empty Latent Image" },
+          "inputs": { "width": 512, "height": 512, "batch_size": 1 } },
+
+  "31": { "class_type": "KSampler", "_meta": { "title": "AI_SAMPLER" },
+          "inputs": { "seed": 0, "steps": 4, "cfg": 1.0,
+                      "sampler_name": "lcm", "scheduler": "karras", "denoise": 1.0,
+                      "model": ["33", 0], "positive": ["2", 0], "negative": ["3", 0],
+                      "latent_image": ["29", 0] } },
+
+  "4":  { "class_type": "VAEDecode", "_meta": { "title": "VAE Decode" },
+          "inputs": { "samples": ["31", 0], "vae": ["1", 2] } },
+
+  "5":  { "class_type": "PreviewImage", "_meta": { "title": "AI_OUTPUT" },
+          "inputs": { "images": ["4", 0] } }
+}

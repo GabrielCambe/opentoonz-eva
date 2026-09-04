@@ -150,6 +150,9 @@ if(PLATFORM EQUAL 64)
         ../stopmotion/canon.h
         ../stopmotion/stopmotionserial.h
         ../stopmotion/stopmotionlight.h
+        ../aiassist/comfyclient.h
+        ../aiassist/graphtemplate.h
+        ../aiassist/aiassistcontroller.h
         cameracapturelevelcontrol.h
         penciltestpopup.h
         navtageditorpopup.h
@@ -421,6 +424,9 @@ if(PLATFORM EQUAL 64)
         ../stopmotion/canon.cpp
         ../stopmotion/stopmotionserial.cpp
         ../stopmotion/stopmotionlight.cpp
+        ../aiassist/comfyclient.cpp
+        ../aiassist/graphtemplate.cpp
+        ../aiassist/aiassistcontroller.cpp
         cameracapturelevelcontrol.cpp
         penciltestpopup.cpp
         navtageditorpopup.cpp
@@ -494,6 +500,7 @@ include_directories(
     ../../sources/toonzfarm/include
     ../../sources/toonzqt
     ../../sources/stopmotion
+    ../../sources/aiassist
 )
 
 if (WITH_CANON)
