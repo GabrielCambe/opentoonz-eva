@@ -1,0 +1,93 @@
+<task profile="discovery" risk="low">
+  <description>
+    Enable building and running the user's OpenToonz fork from Visual Studio Code Insiders instead
+    of the full Visual Studio IDE. The project is CMake-based; Visual Studio only ever consumed the
+    CMake-generated solution. VS Code Insiders can drive the identical build through the CMake Tools
+    extension and the same MSVC + Qt 5.15.2 toolchain, then launch/debug OpenToonz.exe with the
+    C/C++ extension's Windows debugger (cppvsdbg). Deliverable: working .vscode config files plus a
+    short how-to guide.
+  </description>
+
+  <input>
+    <folder path="C:/Users/almei/Documents/opentoonz-eva">Repo root (mounted workspace).</folder>
+    <file path="C:/Users/almei/Documents/opentoonz-eva/.vscode/settings.json">Existing config: cmake.sourceDirectory = toonz/sources.</file>
+    <folder path="C:/Users/almei/Documents/opentoonz-eva/toonz/build">Canonical build dir. Existing CMakeCache: generator "Visual Studio 18 2026", QT_PATH C:/Qt/5.15.2/msvc2019_64, Debug. Debug/ already has OpenToonz.exe + deployed Qt5*d.dll.</file>
+    <file path="C:/Users/almei/Documents/opentoonz-eva/toonz/sources/CMakeLists.txt">Root CMake; RUNTIME_OUTPUT_DIRECTORY = CMAKE_BINARY_DIR, so exe = toonz/build/Debug/OpenToonz.exe.</file>
+    <file path="C:/Users/almei/Documents/opentoonz-eva/doc/how_to_build_win.md">Official Windows build doc (VS2019 + Qt5.15 + CMake, build dir toonz/build).</file>
+  </input>
+
+  <notes>
+    Task profile: discovery
+    Risk level: low
+    Execution mode: standard-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Design guidance: not-needed
+    Knowledge index: disabled
+    Knowledge index backend: none
+    Key facts from preliminary scan: CMake generator "Visual Studio 18 2026"; Qt at C:/Qt/5.15.2/msvc2019_64;
+    canonical build dir is toonz/build (has deployed Qt DLLs next to exe); root build/ also exists but lacks
+    deployed Qt DLLs so it is not used. Reuse toonz/build cache to avoid a full reconfigure.
+  </notes>
+
+  <phases>
+    <phase id="p1" status="completed">
+      <description>Confirm the build mechanism and the exact toolchain/paths VS Code must reuse.</description>
+      <input>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/toonz/build/CMakeCache.txt">Generator, QT_PATH, build type.</file>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/.vscode/settings.json">Current source dir setting.</file>
+      </input>
+      <steps>
+        <step id="s1" tag="research" status="completed">Scan repo: confirm CMake build, locate build dirs and generated exe.</step>
+        <step id="s2" tag="analyze" status="completed">Determine canonical build dir (toonz/build) and runtime exe path + Qt DLL location.</step>
+        <step id="s3" tag="decide" status="completed">Decide to reuse existing toonz/build cache and the cppvsdbg debugger.</step>
+      </steps>
+      <output>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/tasks/knowledge/vscode_build__context.md">Toolchain + path facts.</file>
+      </output>
+      <review status="approved">Build mechanism and paths confirmed against on-disk cache and binaries.</review>
+      <approval required_by="ai-approver" status="approved">Facts verified; safe to write configs.</approval>
+    </phase>
+
+    <phase id="p2" status="in-progress">
+      <description>Create .vscode config so VS Code Insiders builds + runs OpenToonz one-click.</description>
+      <input>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/.vscode/settings.json">Extend with build dir + generator + QT_PATH.</file>
+      </input>
+      <steps>
+        <step id="s4" tag="edit_file" status="pending">Update settings.json: cmake.buildDirectory=toonz/build, generator, configureSettings QT_PATH.</step>
+        <step id="s5" tag="create_file" status="pending">Create launch.json: cppvsdbg config launching CMake launch target, Qt bin on PATH.</step>
+        <step id="s6" tag="create_file" status="pending">Create tasks.json: CMake build task bound to the OpenToonz target.</step>
+        <step id="s7" tag="create_file" status="pending">Create extensions.json: recommend cmake-tools + cpptools.</step>
+      </steps>
+      <output>
+        <folder path="C:/Users/almei/Documents/opentoonz-eva/.vscode">Updated VS Code config.</folder>
+      </output>
+      <review status="pending">JSON valid; paths match real build dir and exe.</review>
+      <approval required_by="ai-approver" status="pending">Configs reference existing cache and binaries correctly.</approval>
+    </phase>
+
+    <phase id="p3" status="pending">
+      <description>Verify and document the workflow for the user.</description>
+      <input>
+        <folder path="C:/Users/almei/Documents/opentoonz-eva/.vscode">Config files to validate.</folder>
+      </input>
+      <steps>
+        <step id="s8" tag="verify" status="pending">Validate all JSON parses and paths exist on disk.</step>
+        <step id="s9" tag="document" status="pending">Write short how-to guide (configure, build, run, debug).</step>
+        <step id="s10" tag="summarize" status="pending">Write knowledge change summary.</step>
+      </steps>
+      <output>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/tasks/knowledge/vscode_build__guide.md">User-facing how-to.</file>
+        <file path="C:/Users/almei/Documents/opentoonz-eva/tasks/knowledge/vscode_build__change_summary.md">What changed.</file>
+      </output>
+      <review status="pending">Guide accurate; configs validated.</review>
+      <approval required_by="ai-approver" status="pending">Deliverable complete.</approval>
+    </phase>
+  </phases>
+
+  <output>
+    <folder path="C:/Users/almei/Documents/opentoonz-eva/.vscode">One-click build/run/debug config for VS Code Insiders.</folder>
+    <file path="C:/Users/almei/Documents/opentoonz-eva/tasks/knowledge/vscode_build__guide.md">How-to guide.</file>
+  </output>
+</task>

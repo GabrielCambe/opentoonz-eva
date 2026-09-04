@@ -1,0 +1,373 @@
+<task id="aiassist-comfyui-panel" status="in-progress">
+  <description>
+    Criar um painel flutuante de geracao por IA dentro do fork opentoonz-eva. O painel usa o frame
+    atual como referencia visual, envia para um servidor ComfyUI configuravel por preferencia,
+    exibe o resultado e deixa o usuario decidir se o converte em level. Inclui um seletor de grafos
+    baseado em templates JSON exportados pelo ComfyUI e um controle opcional de ciclo de vida do
+    servidor. Requisito transversal: nenhuma dependencia de hardware, servico ou instalacao
+    especifica desta maquina.
+  </description>
+
+  <notes>
+    Task profile: creation
+    Risk level: medium
+    Execution mode: governed-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Design guidance: completed
+    Knowledge index: enabled
+    Knowledge index backend: sqlite-vec
+
+    Restricao de ambiente: o agente executor roda em container remoto e alcanca o repositorio pelo
+    folder conectado, mas NAO consegue compilar o OpenToonz (toolchain MSVC vive na maquina do
+    usuario) nem baixar modelos para o disco dela. Passos de build e download sao assignee="user".
+    O agente alcanca o ComfyUI em 127.0.0.1:8188 apenas pelo painel de navegador da maquina.
+
+    Decisao de arquitetura herdada do plano de origem: a localizacao do ComfyUI e configuracao
+    (comfyui_url, comfyui_launch_cmd, comfyui_working_dir), nunca suposicao no codigo. Reutilizar o
+    CreatorSpaceWindowsService foi avaliado e rejeitado: acopla a maquinas Acer, ao workaround de
+    locale desta maquina e a um protocolo de pipe nao documentado, sem beneficio sobre QProcess.
+
+    Higiene de fork: divergencia contra upstream deve ficar em arquivos novos sob
+    toonz/sources/aiassist/ mais no maximo 5 insercoes no fim de listas existentes.
+
+    Progresso:
+    - Concluido: meta capture-comfyui-contract
+    - Concluido: p1 substrato e templates, aprovado por xml-autonomous-approver
+    - Concluido: p2 oraculo em Python, aprovado com ressalva [MINOR]
+    - Em andamento: p3 fatia vertical do painel. Codigo escrito e insercoes aplicadas;
+      aguardando p3-s0 e p3-s6 (assignee=user) para o gate de aprovacao.
+
+    Decisoes:
+    - [MEDIUM] denoise do template txt2img elevado de 0.7 para 1.0. Partindo de EmptyLatentImage
+      um denoise menor que 1 deixa estrutura residual do latente zerado. O img2img mantem 0.7.
+    - [LOW] Templates limpos na captura: um unico no de referencia alimentando VAEEncode e
+      ControlNet, cadeia morta de ControlNet removida do txt2img, PreviewImage orfao removido.
+    - [LOW] AI_NEGATIVE e AI_CONTROL acrescentados ao contrato de patch. AI_REFERENCE passou a
+      ser opcional, e sua ausencia marca o template como txt2img.
+    - [LOW] Oraculo escrito so com biblioteca padrao, para rodar em qualquer maquina sem pip.
+
+    Verificacao:
+    - /system_stats: ComfyUI v0.2.6, Python 3.12.7, cuda:0 RTX 5070 Laptop, 8123 MB
+    - Round trip txt2img: prompt_id fc480acd-5e1c-4997-a779-9687c845f58d, PNG 404.882 bytes
+    - Round trip img2img: prompt_id 0698c065-8094-40ea-9b47-80c722fa3bb9, PNG 269.649 bytes
+    - aiassist_oracle.py --dry-run: validacao de titulos e patch corretos
+
+    Decisoes da fase 3:
+    - [MEDIUM] Correcao de plano: nao existe add_subdirectory(aiassist). O modulo stopmotion nao e
+      alvo CMake proprio; seus arquivos entram nas listas de toonz/CMakeLists.txt. O aiassist segue
+      o mesmo padrao. Divergencia final: 6 pontos, 7 linhas, todas em listas de itens semelhantes.
+    - [MEDIUM] URL do ComfyUI guardada em QSettings e nao em Preferences. Usar Preferences
+      adicionaria mais dois arquivos do upstream a superficie de divergencia sem ganho nesta fase.
+      Migracao avaliada na fase 4.
+    - [LOW] Insercao como level via IoCmd::loadResources sobre um PNG gravado em +drawings, em vez
+      de construir TXshSimpleLevel a mao. Herda undo, level set e politica de import.
+    - [LOW] Variavel de ambiente AIASSIST_GRAPHS para apontar a pasta de templates em build de
+      desenvolvimento, evitando depender de etapa de deploy.
+
+    Verificacao estatica da fase 3:
+    - Os dez headers incluidos existem nos caminhos usados
+    - AIAssistController deriva de QWidget, igual a StopMotionController
+    - Insercoes aplicadas e conferidas por grep nos cinco arquivos
+
+    Build 1 (usuario, MSVC): configure OK; os tres .cpp do aiassist compilaram e o moc rodou
+    nos tres. Unico erro em todo o log: C1083 em tpanels.cpp(36) — aiassistcontroller.h nao
+    encontrado. Causa: os arquivos estavam nas listas HEADERS/SOURCES mas a pasta nao estava
+    em include_directories(). Corrigido adicionando ../../sources/aiassist na lista (~l.499).
+    Resto do log e warning C4251/C4018/C4566 pre-existente em todo o codigo do OpenToonz.
+    moc reporta "No relevant classes found" em graphtemplate.h porque GraphTemplate nao tem
+    Q_OBJECT — inofensivo, nao gera saida.
+
+    Build 2 (usuario, MSVC): compilou e linkou. O painel abre e renderiza (combo de grafo,
+    prompt, negativo, seed, Generate, Insert as Level). O item de menu nao aparecia por causa
+    do XML de menubar, nao do codigo - ver tasks/menubar_template_drift.xml. Combo vazio e
+    Generate desabilitado sao comportamento correto de scanFolder() sem achar templates:
+    corrigido copiando os .json para toonz/build/Debug/aiassist/graphs, que e o caminho padrao
+    (applicationDirPath()/aiassist/graphs), dispensando AIASSIST_GRAPHS.
+
+    Diagnostico por computer use (2026-09-03), painel aberto no build Release:
+    - O painel ACEITA entrada (texto digitado no prompt aparece). Nao esta travado.
+    - Combo vazio confirmado: clique nao abre lista nenhuma. Generate desabilitado e
+      consequencia correta de m_templates.isEmpty().
+    - Os .json tinham sido copiados para toonz/build/Debug/aiassist/graphs, mas o executavel
+      em uso e toonz/build/Release/OpenToonz.exe (mais novo). Copiados tambem para Release.
+    - Fundo preto e labels invisiveis: o tema ativo e Neutral, onde QWidget=#808080,
+      TPanel=#030303 e QLabel color=black. AIAssistController e subclasse propria de QWidget,
+      e o Qt so aplica background de QSS nessas subclasses com WA_StyledBackground ligado.
+      Sem a flag a widget nao pinta nada, aparece o #030303 do TPanel e os QLabel pretos
+      somem no preto. Corrigido com setAttribute(Qt::WA_StyledBackground, true) e
+      setObjectName("AIAssistController") no construtor.
+
+    Prompt negativo (2026-09-03): o campo nao surtia efeito nos dois templates capturados.
+    Nao e bug do patch - AI_NEGATIVE existe, esta ligado na entrada negative do KSampler e
+    recebe o texto. A causa e cfg = 1.0 dos grafos LCM: ruido = uncond + cfg*(cond-uncond)
+    colapsa para cond e o termo negativo se cancela. O Acer Drawing Assistant tem a mesma
+    limitacao pelo mesmo motivo. Respostas:
+    - Novo template sd15_cfg_txt2img.json (25 steps, cfg 7.0, dpmpp_2m, sem LoRA de LCM).
+    - GraphTemplate ganhou samplerCfg() e negativeHasEffect(); o campo Negative agora e
+      desabilitado quando o negativo nao pega, e o statusLabel diz qual dos dois motivos e
+      (no ausente, ou cfg 1). O motivo vai no statusLabel porque o Qt nao entrega tooltip
+      para widget desabilitada.
+    - onGenerate manda negativo vazio quando ele nao tem efeito, para nao poluir o /history.
+    Regra para novos templates registrada no knowledge: AI_NEGATIVE exige cfg > 1.
+
+    Captura de referencia reescrita (2026-09-03), a pedido do usuario:
+    - [BUG CORRIGIDO] usava TFrameHandle::getFid(), que so vale no modo LevelFrame. Ao
+      desenhar no ComboViewer sobre uma coluna o app esta em SceneFrame: o handle guarda
+      uma linha e o fid armazenado esta velho. Agora resolve por xsh->getCell(row, col)
+      quando isEditingScene(), e por getCurrentLevel()+getFid() quando isEditingLevel().
+      Decisao do usuario: sem seletor de origem, o painel sempre usa o que esta sendo
+      editado. Menos estado para dessincronizar da tela.
+    - Toonz Raster (.tlv) passou a funcionar: TToonzImageP guarda TRasterCM32 (indices de
+      paleta); o cast direto para TRasterImageP falhava e o painel dizia que nao havia
+      raster. Agora usa TRop::convert(out, cm, palette, TRect()) de tropcm.h.
+    - Vetor (PLI) rasterizado via TOfflineGL + TVectorRenderData na resolucao da camera
+      atual, precedente em toonzlib/scriptbinding_rasterizer.cpp. O level continua vetorial:
+      a rasterizacao e uma copia descartavel so para a referencia, como o usuario pediu.
+    - Imagem achatada sobre branco antes do PNG. O ComfyUI descarta alpha ao carregar; sem
+      isto o fundo transparente de um .tlv viraria preto e o ControlNet leria a folha toda
+      como traco.
+    - sl->getFullsampledFrame(fid, ImageManager::dontPutInCache) no lugar de getFrame.
+
+    Toggle de referencia (2026-09-03), pedido do usuario depois de ver o painel montado:
+    checkbox "Use the drawing I am editing as reference", ligado por padrao, habilitado so
+    em grafo com AI_REFERENCE. Desligar NAO remove a referencia do grafo: os nos sao
+    estruturais e o LoadImageFromBase64 recusa data vazio. Em vez disso build() neutraliza -
+    AI_CONTROL.strength = 0 e AI_SAMPLER.denoise = 1.0 - e o painel manda uma folha branca
+    512x512 so para satisfazer o no. Com denoise 1.0 o latente da referencia e inteiramente
+    substituido por ruido e com strength 0 o ControlNet nao condiciona: o resultado e
+    txt2img de verdade saindo do grafo img2img. Isto e o que da valor ao marcador AI_CONTROL
+    capturado na fase 1, que ate agora so existia por completude.
+    Custo aceito: os nos de preprocessamento (AIO_Preprocessor, LineArtPreprocessor) ainda
+    rodam sobre a folha branca. Desperdicio pequeno e previsivel, em troca de nao precisar
+    parear templates img2img com irmaos txt2img.
+
+    Linha de escala da referencia (2026-09-03): o statusLabel agora diz o tamanho da celula
+    corrente e para onde o grafo vai leva-lo. Fonte do tamanho: sl->getResolution() para
+    raster e tlv, resolucao da camera para vetor (que nao tem resolucao propria, e
+    rasterizado no enquadramento da camera). Alvo: GraphTemplate::referenceScaleTarget(),
+    que procura um no marcado AI_SCALE e, na falta dele, aceita um unico ImageScale no
+    grafo. Com zero, mais de um, ou width/height vindos por link em vez de literal, retorna
+    false e o painel omite o dado em vez de chutar.
+    Avisa esticamento, nao so reducao: ImageScale com crop desabilitado leva a exatamente
+    WxH sem preservar proporcao. Uma camera 16:9 indo para 512x512 chega deformada, o que
+    muda o resultado e nao era visivel em lugar nenhum ate agora.
+    A linha acompanha frameSwitched, columnIndexSwitched e xshLevelSwitched; sem isso ela
+    mentiria assim que o usuario trocasse de celula.
+
+    Modo ao vivo (2026-09-03): checkbox "Live: regenerate as I type", desligado por padrao,
+    habilitado so em grafo com steps entre 1 e 8 (GraphTemplate::isLiveCapable). Debounce de
+    300 ms, um job em voo, coalescencia final pela diferenca entre o campo e
+    m_submittedPrompt. Sem interrupt. ComfyClient ganhou contador de ciclo em
+    reply->property("aiGeneration") para descartar resposta de ciclo vencido.
+    Falha desliga o modo ao vivo em vez de repetir - retry automatico contra servidor fora
+    do ar seria o defeito da Acer reimplementado por nos.
+    Detalhes em tasks/knowledge/aiassist__comfyui_protocol.md.
+
+    Indicador de progresso (2026-09-03): spinner ASCII de quatro quadros a 120 ms mais
+    segundos decorridos, compondo com a mensagem que o ComfyClient ja emitia (Submitting,
+    Generating, Downloading). Quadros em ASCII de proposito - a fonte vem do tema e o MSVC
+    ja emite C4566 para literais nao-ASCII neste projeto. Os segundos existem porque o
+    timeout do cliente e de 300 s: sem eles nao da para distinguir lento de travado.
+    m_busyMessage guarda a mensagem base a parte do label, porque o tique recompoe o texto
+    do zero em vez de anexar.
+
+    Paridade com o Acer Drawing Assistant (balanco de 2026-09-03): tudo o que eles fazem esta
+    portado, e em quatro pontos o painel vai alem - captura de referencia (celula atual,
+    .tlv, vetor), coalescencia no lugar de um job por tecla, seletor de grafos, e mensagem
+    explicita de falha de conexao. UMA lacuna honesta: o seletor de "modelos de estilo" da
+    interface deles nunca foi entendido. O inventario do servidor lista um unico checkpoint,
+    uma LoRA, um controlnet e style_models vazio, e nas 200 geracoes capturadas nenhuma
+    referencia de modelo variou - logo aquele seletor muda texto de prompt ou forma de
+    grafo, nao modelo. Nao afirmar paridade nesse ponto sem investigar.
+
+    Questoes abertas:
+    - [BLOCKER-BRANDO] p3 nao pode ser aprovada sem build: p3-s6 (assignee=user) e a unica
+      verificacao possivel do codigo C++. O agente nao tem MSVC.
+
+    Ressalva [MINOR] da fase 2 FECHADA em p3-s0:
+    - Usuario executou tools/aiassist_oracle.py na maquina dele contra 127.0.0.1:8188
+    - prompt_id fce0c994-b39c-49f9-8955-f85f4bea9d04, teste.png com 375.319 bytes
+    - Confirma o oraculo como implementacao de referencia valida: carga do template, validacao de
+      titulos, patch, POST /prompt, polling /history e download via /view funcionam de ponta a ponta
+      a partir do arquivo .py, nao apenas pelo navegador
+  </notes>
+
+  <agents>
+    <agent name="xml-autonomous-guide" role="guidance" />
+    <agent name="xml-autonomous-approver" role="approver" />
+    <agent name="xml-knowledge-indexer" role="indexer" />
+  </agents>
+
+  <input>
+    <folder path="tasks/knowledge">Conhecimento compartilhado ja existente sobre o OpenToonz.</folder>
+    <file path="tasks/knowledge/opentoonz__dependency_map.md">Camadas e alvos de build de toonz/sources.</file>
+    <file path="tasks/knowledge/opentoonz__include_headers_map.md">Mapa de headers publicos.</file>
+    <file path="tasks/knowledge/opentoonz__core_libraries_architecture.md">Arquitetura das bibliotecas centrais.</file>
+    <file path="toonz/sources/stopmotion/stopmotioncontroller.cpp">Precedente: painel que fala com sistema externo e injeta frames.</file>
+    <file path="toonz/sources/include/toonzqt/gutil.h">rasterToQImage (l.62) e rasterFromQImage (l.72): a ponte TRaster/QImage.</file>
+    <file path="toonz/sources/toonz/tpanels.cpp">Registro de painel: TPanelFactory e OpenFloatingPanel (~l.1573).</file>
+    <file path="toonz/sources/toonz/menubarcommandids.h">IDs de comando de menu.</file>
+    <webpage url="https://claude.ai/code/artifact/885396b2-f271-431d-b7ad-3cd9aaa5c79f">Plano de origem em seis fases.</webpage>
+  </input>
+
+  <meta>
+    <task id="capture-comfyui-contract" status="completed">
+      <description>
+        Capturar do ComfyUI em execucao o contrato real de API e os grafos que o Acer Drawing
+        Assistant submete, para servir de template e de fonte de verdade do protocolo.
+      </description>
+      <input>
+        <webpage url="http://127.0.0.1:8188">Servidor ComfyUI ativo na maquina do usuario.</webpage>
+      </input>
+      <steps>
+        <step id="m1-s1" tag="research" status="completed">Consultar /system_stats e /object_info para confirmar alcance e inventario de modelos.</step>
+        <step id="m1-s2" tag="research" status="completed">Extrair de /history os grafos em formato API, nas duas formas observadas (img2img com VAEEncode e txt2img com EmptyLatentImage).</step>
+        <step id="m1-s3" tag="document" status="completed">Escrever aiassist__comfyui_protocol.md com endpoints, formato do POST /prompt, ciclo de polling e contrato de patch por _meta.title.</step>
+      </steps>
+      <output>
+        <folder path="tasks/knowledge">Pasta de conhecimento compartilhado.</folder>
+        <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato de API do ComfyUI e anatomia dos grafos capturados.</file>
+      </output>
+    </task>
+  </meta>
+
+  <phases>
+
+    <phase id="p1" status="completed">
+      <description>Substrato e templates de grafo. Verificar o servidor e materializar os grafos capturados como templates versionados no repositorio.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Saida do meta task.</file>
+      </input>
+      <steps>
+        <step id="p1-s1" tag="verify" status="completed">Confirmar que o ComfyUI responde em comfyui_url e listar checkpoints, loras e controlnets disponiveis.</step>
+        <step id="p1-s2" tag="create_file" status="completed">Criar toonz/sources/aiassist/graphs/sd15_scribble_img2img.json a partir do grafo capturado, com os nos marcados por _meta.title.</step>
+        <step id="p1-s3" tag="create_file" status="completed">Criar toonz/sources/aiassist/graphs/sd15_scribble_txt2img.json na mesma convencao.</step>
+        <step id="p1-s4" tag="document" status="completed">Registrar em aiassist__decision_flow.md a convencao de marcacao AI_PROMPT / AI_REFERENCE / AI_SAMPLER / AI_OUTPUT e a regra de validacao de template.</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/aiassist/graphs/sd15_scribble_img2img.json">Template de grafo img2img marcado.</file>
+        <file path="toonz/sources/aiassist/graphs/sd15_scribble_txt2img.json">Template de grafo txt2img marcado.</file>
+        <file path="tasks/knowledge/aiassist__decision_flow.md">Contrato de patch e regra de validacao.</file>
+      </output>
+      <review status="completed">
+        Aprovado por xml-autonomous-approver.
+        Evidencia: json.load bem-sucedido nos dois templates (14 e 8 nos); validacao de titulos
+        passou; os tres modelos referenciados (DreamShaper_8_pruned, pytorch_lora_weights,
+        control_v11p_sd15_scribble) constam no inventario de /object_info do servidor.
+        Desvio registrado: o criterio original exigia os quatro titulos nos dois templates. O
+        contrato foi refinado durante a execucao — AI_REFERENCE e opcional e sua ausencia e
+        semantica (marca o template como txt2img). Refinamento documentado em
+        aiassist__decision_flow.md secao 2.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Aprovado automaticamente apos checagem de artefatos e verificacao.
+      </approval>
+    </phase>
+
+    <phase id="p2" status="completed">
+      <description>Oraculo em Python: implementacao de referencia minima do protocolo, usada depois para comparar requisicoes contra o painel em C++.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato de API.</file>
+        <file path="toonz/sources/aiassist/graphs/sd15_scribble_txt2img.json">Template.</file>
+      </input>
+      <steps>
+        <step id="p2-s1" tag="create_file" status="completed">Escrever tools/aiassist_oracle.py: carrega template, aplica patch por _meta.title, POST /prompt, polling /history, baixa o PNG via /view.</step>
+        <step id="p2-s2" tag="verify" status="completed">Validar o mesmo fluxo ponta a ponta contra o servidor vivo e confirmar que a imagem retorna.</step>
+        <step id="p2-s3" tag="document" status="completed">Registrar no protocolo o resultado da validacao e qualquer divergencia encontrada.</step>
+      </steps>
+      <output>
+        <file path="tools/aiassist_oracle.py">Implementacao de referencia do protocolo.</file>
+      </output>
+      <review status="completed">
+        Aprovado por xml-autonomous-approver com ressalva registrada.
+        Evidencia: --dry-run valida titulos e aplica patch corretamente; o mesmo contrato foi
+        executado ponta a ponta contra o servidor vivo, produzindo PNG nos dois templates
+        (prompt_id fc480acd, 404.882 bytes; prompt_id 0698c065, 269.649 bytes com referencia
+        base64 de 14.506 chars consumida).
+        [MINOR] O arquivo .py em si nao foi executado contra o servidor: o container do agente
+        nao alcanca 127.0.0.1 da maquina do usuario. Passo p3-s0 (assignee=user) cobre isso.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Aprovado automaticamente. Ressalva [MINOR] convertida no passo p3-s0.
+      </approval>
+    </phase>
+
+    <phase id="p3" status="in-progress">
+      <description>Fatia vertical do painel em C++: um botao Gerar que atravessa todas as camadas uma vez, do frame atual ao preview, com insercao em level como acao explicita do usuario.</description>
+      <input>
+        <file path="toonz/sources/stopmotion/stopmotioncontroller.cpp">Precedente arquitetural.</file>
+        <file path="toonz/sources/include/toonzqt/gutil.h">Conversores TRaster/QImage.</file>
+        <file path="tools/aiassist_oracle.py">Referencia de comparacao.</file>
+      </input>
+      <steps>
+        <step id="p3-s0" tag="verify" status="completed" assignee="user">Rodar tools/aiassist_oracle.py uma vez contra o servidor e confirmar que o PNG e gravado. Fecha a ressalva [MINOR] da fase 2.</step>
+        <step id="p3-s1" tag="create_file" status="completed">Criar toonz/sources/aiassist/ com comfyclient.h/cpp (QNetworkAccessManager, POST /prompt, polling, GET /view).</step>
+        <step id="p3-s2" tag="create_file" status="completed">Criar graphtemplate.h/cpp: carregar JSON, validar titulos, aplicar patch.</step>
+        <step id="p3-s3" tag="create_file" status="completed">Criar aiassistcontroller.h/cpp e o painel Qt com prompt, botao Gerar, preview e botao Inserir como level.</step>
+        <step id="p3-s4" tag="create_file" status="completed">Criar toonz/sources/aiassist/CMakeLists.txt.</step>
+        <step id="p3-s5" tag="edit_file" status="completed">Inserir nas listas existentes: MI_OpenAIAssistPanel em menubarcommandids.h; include, TPanelFactory e OpenFloatingPanel em tpanels.cpp; acao em mainwindow.cpp; item em menubar.cpp; 3 headers e 3 sources em toonz/CMakeLists.txt, mais ../../sources/aiassist no include_directories. Corrigido durante a execucao: nao ha add_subdirectory, stopmotion nao e alvo CMake proprio; e listar os arquivos nao coloca a pasta no include path (erro C1083 na primeira build).</step>
+        <step id="p3-s6" tag="verify" status="in-progress" assignee="user">Compilar o fork no MSVC, abrir o painel pelo menu Windows e gerar uma imagem. Reportar erros de build ou runtime. Tentativa 1: os 3 .cpp compilaram e o moc rodou nos 3; unico erro foi C1083 em tpanels.cpp(36) por falta de include path, corrigido em p3-s5. Aguardando tentativa 2.</step>
+        <step id="p3-s7" tag="document" status="completed">Escrever aiassist__change_summary.md com os arquivos novos e as insercoes exatas em arquivos do upstream.</step>
+      </steps>
+      <output>
+        <folder path="toonz/sources/aiassist">Modulo novo do painel.</folder>
+        <file path="tasks/knowledge/aiassist__change_summary.md">Resumo de mudancas e superficie de divergencia contra o upstream.</file>
+      </output>
+      <review status="pending">O modulo compila, o painel abre, uma geracao completa o caminho ate o preview, e a divergencia em arquivos do upstream nao passa de cinco insercoes no fim de listas.</review>
+      <approval required_by="ai-approver" status="pending" />
+    </phase>
+
+    <phase id="p4" status="pending">
+      <description>Seletor de grafos e preferencias de conexao, entregando a portabilidade prometida.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist__decision_flow.md">Contrato de patch.</file>
+        <folder path="toonz/sources/aiassist/graphs">Templates.</folder>
+      </input>
+      <steps>
+        <step id="p4-s1" tag="edit_file" status="pending">Varrer graphs/ em tempo de execucao e popular um combo box, ignorando templates que falhem a validacao de titulos.</step>
+        <step id="p4-s2" tag="edit_file" status="pending">Adicionar comfyui_url, comfyui_launch_cmd e comfyui_working_dir as preferencias, com comfyui_url default http://127.0.0.1:8188.</step>
+        <step id="p4-s3" tag="edit_file" status="pending">Tratar falha de conexao com mensagem explicita citando a URL e atalho para preferencias. Nunca retry silencioso.</step>
+        <step id="p4-s4" tag="verify" status="pending" assignee="user">Trocar de grafo pelo seletor e apontar comfyui_url para uma porta inexistente para confirmar a mensagem de erro.</step>
+      </steps>
+      <output>
+        <folder path="toonz/sources/aiassist">Painel com seletor e preferencias.</folder>
+      </output>
+      <review status="pending">Trocar de grafo nao exige recompilacao; URL invalida produz mensagem acionavel em vez de espera indefinida.</review>
+      <approval required_by="ai-approver" status="pending" />
+    </phase>
+
+    <phase id="p5" status="pending">
+      <description>SDXL documentado e ciclo de vida opcional do servidor. Fase de aprendizado mais conveniencia; nenhuma capacidade do painel depende dela.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato.</file>
+      </input>
+      <steps>
+        <step id="p5-s1" tag="document" status="completed">Escrever aiassist__sdxl_notes.md com o orcamento de VRAM, as rotas para 8 GB e o roteiro de medicao. Corrigida a estimativa anterior de ~9,5 GB de pesos, que estava inflada: em fp16 sao ~6,8 GB.</step>
+        <step id="p5-s2" tag="use_tool" status="in-progress" assignee="user">Baixar SDXL, a LoRA Lightning 8-step, o T2I-Adapter sketch e o ControlNet SDXL scribble; conferir que os nomes de arquivo batem com os dos templates via /object_info; medir tempo e pico de VRAM nos quatro e preencher a tabela do secao 5 do sdxl_notes.</step>
+        <step id="p5-s3" tag="create_file" status="completed">Criar os templates SDXL em graphs/ seguindo o mesmo contrato de titulos. Quatro, nao um, a pedido do usuario: lightning e base cruzados com T2I-Adapter e ControlNet, para ele comparar. Gerados por script a partir de uma base unica em vez de copia-cola, para nao divergirem em silencio.</step>
+        <step id="p5-s4" tag="edit_file" status="pending">Implementar o ciclo de vida opcional com QProcess, incluindo terminate no closeEvent e checagem de porta ocupada.</step>
+        <step id="p5-s5" tag="sync_knowledge_index" status="pending" assignee="xml-knowledge-indexer">Reconciliar o indice vetorial com os markdown novos e atualizados e registrar o recibo de sync em notes.</step>
+      </steps>
+      <output>
+        <file path="tasks/knowledge/aiassist__sdxl_notes.md">Orcamento de VRAM e medicoes reais.</file>
+        <file path="toonz/sources/aiassist/graphs/sdxl_lightning_t2i.json">SDXL rapido, condicionamento leve.</file>
+        <file path="toonz/sources/aiassist/graphs/sdxl_lightning_cnet.json">SDXL rapido, ControlNet completo.</file>
+        <file path="toonz/sources/aiassist/graphs/sdxl_base_t2i.json">SDXL cheio, condicionamento leve.</file>
+        <file path="toonz/sources/aiassist/graphs/sdxl_base_cnet.json">SDXL cheio, ControlNet completo.</file>
+      </output>
+      <review status="pending">O template SDXL gera pela mesma interface sem mudanca de codigo; as medicoes existem e sao proprias, nao copiadas.</review>
+      <approval required_by="ai-approver" status="pending" />
+    </phase>
+
+  </phases>
+
+  <output>
+    <folder path="toonz/sources/aiassist">Modulo do painel: cliente, templates, controlador e UI.</folder>
+    <file path="tools/aiassist_oracle.py">Implementacao de referencia do protocolo.</file>
+    <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato de API do ComfyUI.</file>
+    <file path="tasks/knowledge/aiassist__decision_flow.md">Contrato de patch de grafos e validacao.</file>
+    <file path="tasks/knowledge/aiassist__change_summary.md">Superficie de divergencia contra o upstream.</file>
+    <file path="tasks/knowledge/aiassist__sdxl_notes.md">VRAM, estrategias para 8 GB e medicoes.</file>
+  </output>
+</task>
