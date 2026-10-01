@@ -107,6 +107,9 @@ public:
   void insertCells();
 
   void openTimeStretchPopup();
+  //! Sets a gain on the selected rows of every sound column in the
+  //! selection, through the SoundGainPopup.
+  void adjustSoundGain();
 
   void dRenumberCells();
   void dPasteCells();

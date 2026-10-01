@@ -81,6 +81,7 @@ set(MOC_HEADERS
     projectpopup.h
     psdsettingspopup.h
     reframepopup.h
+    soundgainpopup.h
     renumberpopup.h
     reslist.h
     ruler.h
@@ -389,6 +390,7 @@ set(SOURCES
     locatorpopup.cpp
     styleshortcutswitchablepanel.cpp
     reframepopup.cpp
+    soundgainpopup.cpp
     autoinputcellnumberpopup.cpp
     colormodelbehaviorpopup.cpp
     boardsettingspopup.cpp

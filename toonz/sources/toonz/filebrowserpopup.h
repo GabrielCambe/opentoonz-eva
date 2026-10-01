@@ -264,6 +264,20 @@ public:
 
 //-----------------------------------------------------------------------------
 
+//! Writes a copy of the scene without sound gain sections, for stock
+//! OpenToonz. The working scene is left untouched.
+class ExportCompatibleScenePopup final : public FileBrowserPopup {
+  Q_OBJECT
+
+public:
+  ExportCompatibleScenePopup();
+
+  bool execute() override;
+  void initFolder() override;
+};
+
+//-----------------------------------------------------------------------------
+
 class LoadLevelPopup final : public FileBrowserPopup {
   Q_OBJECT
 

@@ -13,8 +13,22 @@
 #include "tconvert.h"
 #include "toonz/preferences.h"
 
+#include <cmath>
+#include <algorithm>
 #include <QAudioFormat>
 #include <QAudioDeviceInfo>
+
+//=============================================================================
+
+namespace {
+// A count rather than a flag, so nested scopes cannot switch the omission
+// off early. Saves run on the GUI thread, so no lock is needed.
+int g_soundGainOmitDepth = 0;
+}  // namespace
+
+SoundGainOmitScope::SoundGainOmitScope() { ++g_soundGainOmitDepth; }
+SoundGainOmitScope::~SoundGainOmitScope() { --g_soundGainOmitDepth; }
+bool SoundGainOmitScope::isActive() { return g_soundGainOmitDepth > 0; }
 
 //=============================================================================
 
@@ -39,6 +53,7 @@ ColumnLevel *ColumnLevel::clone() const {
   soundColumnLevel->setStartOffset(m_startOffset);
   soundColumnLevel->setEndOffset(m_endOffset);
   soundColumnLevel->setFrameRate(m_fps);
+  soundColumnLevel->m_gainSections = m_gainSections;
   return soundColumnLevel;
 }
 
@@ -52,6 +67,22 @@ void ColumnLevel::loadData(TIStream &is) {
     is >> m_startOffset >> m_endOffset >> m_startFrame >> p;
     TXshSoundLevel *xshLevel = dynamic_cast<TXshSoundLevel *>(p);
     if (xshLevel) m_soundLevel = xshLevel;
+
+    // Optional nested tags. Scenes saved before gain sections existed stop
+    // at the pointer, so the loop simply does not run for them.
+    std::string childName;
+    while (is.openChild(childName)) {
+      if (childName == "gain") {
+        std::vector<SoundGainSection> sections;
+        while (!is.eos()) {
+          SoundGainSection s;
+          is >> s.m_startFrame >> s.m_endFrame >> s.m_gainDb;
+          sections.push_back(s);
+        }
+        setGainSections(sections);
+      }
+      is.closeChild();
+    }
   }
   is.closeChild();
 }
@@ -59,8 +90,87 @@ void ColumnLevel::loadData(TIStream &is) {
 //-----------------------------------------------------------------------------
 
 void ColumnLevel::saveData(TOStream &os) {
-  os.child("SoundCells") << getStartOffset() << getEndOffset()
-                         << getStartFrame() << m_soundLevel.getPointer();
+  os.openChild("SoundCells");
+  os << getStartOffset() << getEndOffset() << getStartFrame()
+     << m_soundLevel.getPointer();
+  // Written only when present, so a scene without gain stays byte-for-byte
+  // what older builds wrote. An export for stock OpenToonz skips it too.
+  if (!m_gainSections.empty() && !SoundGainOmitScope::isActive()) {
+    os.openChild("gain");
+    for (const SoundGainSection &s : m_gainSections)
+      os << s.m_startFrame << s.m_endFrame << s.m_gainDb;
+    os.closeChild();
+  }
+  os.closeChild();
+}
+
+//-----------------------------------------------------------------------------
+
+void ColumnLevel::setGainSections(
+    const std::vector<SoundGainSection> &sections) {
+  std::vector<SoundGainSection> sorted;
+  for (const SoundGainSection &s : sections)
+    if (s.m_endFrame > s.m_startFrame && s.m_gainDb != 0.0)
+      sorted.push_back(s);
+  std::sort(sorted.begin(), sorted.end(),
+            [](const SoundGainSection &a, const SoundGainSection &b) {
+              return a.m_startFrame < b.m_startFrame;
+            });
+
+  // Touching neighbours with the same gain become one section, so repeated
+  // edits over adjacent rows do not pile up fragments and labels.
+  m_gainSections.clear();
+  for (const SoundGainSection &s : sorted) {
+    if (!m_gainSections.empty()) {
+      SoundGainSection &last = m_gainSections.back();
+      if (last.m_endFrame >= s.m_startFrame && last.m_gainDb == s.m_gainDb) {
+        last.m_endFrame = std::max(last.m_endFrame, s.m_endFrame);
+        continue;
+      }
+    }
+    m_gainSections.push_back(s);
+  }
+}
+
+//-----------------------------------------------------------------------------
+
+void ColumnLevel::setGain(int startFrame, int endFrame, double gainDb) {
+  if (endFrame <= startFrame) return;
+  std::vector<SoundGainSection> result;
+  for (const SoundGainSection &s : m_gainSections) {
+    // Keep what lies outside the new stretch; a section that straddles it is
+    // cut, and one wholly inside it is dropped.
+    if (s.m_startFrame < startFrame)
+      result.push_back(
+          {s.m_startFrame, std::min(s.m_endFrame, startFrame), s.m_gainDb});
+    if (s.m_endFrame > endFrame)
+      result.push_back(
+          {std::max(s.m_startFrame, endFrame), s.m_endFrame, s.m_gainDb});
+  }
+  if (gainDb != 0.0) result.push_back({startFrame, endFrame, gainDb});
+  setGainSections(result);
+}
+
+//-----------------------------------------------------------------------------
+
+double ColumnLevel::getGainDbAt(int frame) const {
+  for (const SoundGainSection &s : m_gainSections)
+    if (s.m_startFrame <= frame && frame < s.m_endFrame) return s.m_gainDb;
+  return 0.0;
+}
+
+//-----------------------------------------------------------------------------
+
+std::vector<TSop::GainRange> ColumnLevel::getGainRanges(
+    TINT32 s0, TINT32 s1, double samplePerFrame) const {
+  std::vector<TSop::GainRange> ranges;
+  for (const SoundGainSection &s : m_gainSections) {
+    TINT32 a = std::max<TINT32>((TINT32)(s.m_startFrame * samplePerFrame), s0);
+    TINT32 b = std::min<TINT32>((TINT32)(s.m_endFrame * samplePerFrame), s1 + 1);
+    if (b <= a) continue;
+    ranges.push_back({a - s0, b - s0, std::pow(10.0, s.m_gainDb / 20.0)});
+  }
+  return ranges;
 }
 
 //-----------------------------------------------------------------------------
@@ -800,7 +910,12 @@ void TXshSoundColumn::play(ColumnLevel *columnLevel, int currentFrame) {
   int s1       = endFrame * spf;
 
   if (!soundLevel->getSoundTrack()) return;
-  play(soundLevel->getSoundTrack(), s0, s1, false);
+  // extract() shares the level's buffer, so the gain is applied to the
+  // extracted stretch only and the file's samples stay as loaded.
+  TSoundTrackP track = soundLevel->getSoundTrack()->extract(s0, s1);
+  std::vector<TSop::GainRange> ranges = columnLevel->getGainRanges(s0, s1, spf);
+  if (!ranges.empty()) track = TSop::gain(track, ranges);
+  play(track, 0, track->getSampleCount(), false);
 }
 
 //-----------------------------------------------------------------------------
@@ -1079,11 +1194,103 @@ TSoundTrackP TXshSoundColumn::getOverallSoundTrack(int fromFrame, int toFrame,
 
     if (s1 > 0 && s1 >= s0) {
       soundTrack = soundTrack->extract(s0, s1);
+      // Gain sections scale a private copy of the extract: it shares the
+      // level's buffer, and the level is reused by every play and render.
+      std::vector<TSop::GainRange> ranges =
+          l->getGainRanges(s0, s1, samplePerFrame);
+      if (!ranges.empty()) soundTrack = TSop::gain(soundTrack, ranges);
       overallSoundTrack->copy(
           soundTrack, int((levelStartFrame - fromFrame) * samplePerFrame));
     }
   }
   return overallSoundTrack;
+}
+
+//-----------------------------------------------------------------------------
+
+void TXshSoundColumn::setGainForRows(int r0, int r1, double gainDb) {
+  if (r1 < r0) std::swap(r0, r1);
+  for (ColumnLevel *l : m_levels) {
+    int a = std::max(r0, l->getVisibleStartFrame());
+    int b = std::min(r1, l->getVisibleEndFrame());
+    if (b < a) continue;
+    l->setGain(a - l->getStartFrame(), b - l->getStartFrame() + 1, gainDb);
+  }
+}
+
+//-----------------------------------------------------------------------------
+
+double TXshSoundColumn::getGainDbAtRow(int row) const {
+  ColumnLevel *l = getColumnLevelByFrame(row);
+  return l ? l->getGainDbAt(row - l->getStartFrame()) : 0.0;
+}
+
+//-----------------------------------------------------------------------------
+
+bool TXshSoundColumn::isGainSectionStart(int row) const {
+  ColumnLevel *l = getColumnLevelByFrame(row);
+  if (!l) return false;
+  int frame = row - l->getStartFrame();
+  for (const SoundGainSection &s : l->getGainSections())
+    if (s.m_startFrame == frame) return true;
+  // A section that begins inside the trimmed-off head still gets its label
+  // on the first row that is actually shown.
+  return row == l->getVisibleStartFrame() && l->getGainDbAt(frame) != 0.0;
+}
+
+//-----------------------------------------------------------------------------
+
+std::vector<SoundGainSection> TXshSoundColumn::getGainSections(
+    int levelIndex) const {
+  if (levelIndex < 0 || levelIndex >= m_levels.size())
+    return std::vector<SoundGainSection>();
+  return m_levels.at(levelIndex)->getGainSections();
+}
+
+//-----------------------------------------------------------------------------
+
+void TXshSoundColumn::setGainSections(
+    int levelIndex, const std::vector<SoundGainSection> &sections) {
+  if (levelIndex < 0 || levelIndex >= m_levels.size()) return;
+  m_levels.at(levelIndex)->setGainSections(sections);
+}
+
+//-----------------------------------------------------------------------------
+
+bool TXshSoundColumn::measureRows(int r0, int r1, double &peakDb,
+                                  double &rmsDb) const {
+  if (r1 < r0) std::swap(r0, r1);
+  double peak = 0.0, sumSq = 0.0, sampleCount = 0.0;
+  for (ColumnLevel *l : m_levels) {
+    int a = std::max(r0, l->getVisibleStartFrame());
+    int b = std::min(r1, l->getVisibleEndFrame());
+    if (b < a) continue;
+    TXshSoundLevel *level = l->getSoundLevel();
+    TSoundTrackP track    = level ? level->getSoundTrack() : TSoundTrackP();
+    if (!track || level->getFrameRate() <= 0) continue;
+
+    double spf = track->getSampleRate() / level->getFrameRate();
+    TINT32 s0  = (TINT32)((a - l->getStartFrame()) * spf);
+    TINT32 s1  = (TINT32)((b - l->getStartFrame() + 1) * spf) - 1;
+    double p, r;
+    if (!TSop::measure(track, s0, s1, p, r)) continue;
+
+    // Clips in one column may come from files of different bit depths, so
+    // each is normalised to its own full scale before they are combined.
+    double fullScale = TSop::fullScalePressure(track->getFormat());
+    double n         = (double)(s1 - s0 + 1);
+    peak             = std::max(peak, p / fullScale);
+    sumSq += (r / fullScale) * (r / fullScale) * n;
+    sampleCount += n;
+  }
+  if (sampleCount <= 0.0) return false;
+
+  auto toDb = [](double v) {
+    return (v <= 0.0) ? -120.0 : std::max(-120.0, 20.0 * std::log10(v));
+  };
+  peakDb = toDb(peak);
+  rmsDb  = toDb(std::sqrt(sumSq / sampleCount));
+  return true;
 }
 
 //-----------------------------------------------------------------------------

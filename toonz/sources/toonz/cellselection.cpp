@@ -11,6 +11,7 @@
 #include "filmstripcommand.h"
 #include "menubarcommandids.h"
 #include "timestretchpopup.h"
+#include "soundgainpopup.h"
 #include "tapp.h"
 #include "xsheetviewer.h"
 #include "levelcommand.h"
@@ -36,6 +37,7 @@
 #include "toonz/preferences.h"
 #include "toonz/tpalettehandle.h"
 #include "toonz/txsheethandle.h"
+#include "toonz/txshsoundcolumn.h"
 #include "toonz/txshlevelhandle.h"
 #include "toonz/tcolumnhandle.h"
 #include "toonz/tscenehandle.h"
@@ -1581,6 +1583,7 @@ void TCellSelection::enableCommands() {
                 &TCellSelection::convertVectortoVector);
   enableCommand(this, MI_ReframeWithEmptyInbetweens,
                 &TCellSelection::reframeWithEmptyInbetweens);
+  enableCommand(this, MI_AdjustSoundGain, &TCellSelection::adjustSoundGain);
 
   enableCommand(this, MI_PasteNumbers, &TCellSelection::overwritePasteNumbers);
   enableCommand(this, MI_PasteCellContent, &TCellSelection::pasteCells);
@@ -3037,6 +3040,101 @@ void TCellSelection::openTimeStretchPopup() {
   m_timeStretchPopup->show();
   m_timeStretchPopup->raise();
   m_timeStretchPopup->activateWindow();
+}
+
+//=============================================================================
+// SoundGainUndo
+//-----------------------------------------------------------------------------
+
+namespace {
+
+class SoundGainUndo final : public TUndo {
+  struct ColumnState {
+    TXshSoundColumnP m_column;
+    // One entry per clip in the column: its sections before the edit.
+    std::vector<std::vector<SoundGainSection>> m_before;
+  };
+  std::vector<ColumnState> m_columns;
+  int m_r0, m_r1;
+  double m_gainDb;
+
+  static void notify() {
+    TApp *app = TApp::instance();
+    // The xsheet caches the mixed soundtrack; the sound-changed signal is
+    // what drops it, the same path the column volume slider uses.
+    app->getCurrentXsheet()->notifyXsheetSoundChanged();
+    app->getCurrentXsheet()->notifyXsheetChanged();
+    app->getCurrentScene()->setDirtyFlag(true);
+  }
+
+public:
+  SoundGainUndo(const std::vector<TXshSoundColumn *> &columns, int r0, int r1,
+                double gainDb)
+      : m_r0(r0), m_r1(r1), m_gainDb(gainDb) {
+    for (TXshSoundColumn *column : columns) {
+      ColumnState state;
+      state.m_column = column;
+      for (int i = 0; i < column->getColumnLevelCount(); ++i)
+        state.m_before.push_back(column->getGainSections(i));
+      m_columns.push_back(state);
+    }
+  }
+
+  void undo() const override {
+    for (const ColumnState &state : m_columns)
+      for (int i = 0; i < (int)state.m_before.size(); ++i)
+        state.m_column->setGainSections(i, state.m_before[i]);
+    notify();
+  }
+
+  void redo() const override {
+    for (const ColumnState &state : m_columns)
+      state.m_column->setGainForRows(m_r0, m_r1, m_gainDb);
+    notify();
+  }
+
+  int getSize() const override {
+    return sizeof(*this) + (int)m_columns.size() * 64;
+  }
+
+  QString getHistoryString() override {
+    if (m_gainDb == 0.0) return QObject::tr("Remove Sound Gain");
+    return QObject::tr("Adjust Sound Gain  : %1 dB").arg(m_gainDb, 0, 'f', 1);
+  }
+  int getHistoryType() override { return HistoryType::Xsheet; }
+};
+
+}  // namespace
+
+//-----------------------------------------------------------------------------
+
+void TCellSelection::adjustSoundGain() {
+  if (isEmpty()) return;
+  int r0, c0, r1, c1;
+  getSelectedCells(r0, c0, r1, c1);
+
+  TXsheet *xsh = TApp::instance()->getCurrentXsheet()->getXsheet();
+  std::vector<TXshSoundColumn *> columns;
+  std::vector<int> columnIndices;
+  for (int c = c0; c <= c1; ++c) {
+    TXshColumn *column = xsh->getColumn(c);
+    if (!column || !column->getSoundColumn() || column->isLocked()) continue;
+    columns.push_back(column->getSoundColumn());
+    columnIndices.push_back(c);
+  }
+  if (columns.empty()) {
+    DVGui::warning(
+        QObject::tr("Select cells in an unlocked sound column to adjust "
+                    "their gain."));
+    return;
+  }
+
+  SoundGainPopup popup(xsh, columnIndices, r0, r1);
+  if (popup.exec() != QDialog::Accepted) return;
+
+  SoundGainUndo *undo = new SoundGainUndo(columns, r0, r1, popup.getGainDb());
+  undo->redo();
+  TUndoManager::manager()->add(undo);
 }
 
 //-----------------------------------------------------------------------------
