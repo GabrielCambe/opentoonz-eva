@@ -37,6 +37,7 @@
 // TnzCore includes
 #include "tsystem.h"
 #include "tfont.h"
+#include "tsound.h"
 
 // TnzTools includes
 #include "tools/toolhandle.h"
@@ -1433,6 +1434,7 @@ QString PreferencesPopup::getUIString(PreferencesItemId id) {
       {rewindAfterPlayback, tr("Rewind after Playback")},
       {shortPlayFrameCount,
        tr("Number of Frames to Play \nfor Short Play Command:")},
+      {audioOutputDevice, tr("Audio Output Device:")},
       {generatedMovieViewEnabled, tr("Open Flipbook after Rendering")},
       {previewAlwaysOpenNewFlip, tr("Always Open New Flipbook Window ")},
       {fitToFlipbookWhenPreview,
@@ -1634,7 +1636,7 @@ PreferencesPopup::PreferencesPopup()
   QListWidget* categoryList = new QListWidget(this);
   QStringList categories;
   categories << tr("General") << tr("Interface") << tr("Preview/Render")
-             << tr("Load/Import") << tr("Saving") << tr("Decoder/Encoder")
+             << tr("Audio") << tr("Load/Import") << tr("Saving") << tr("Decoder/Encoder")
              << tr("Drawing") << tr("Tools") << tr("Xsheet") << tr("Onion Skin")
              << tr("Animation") << tr("Auto Lip-Sync") << tr("Colors")
              << tr("Vector Visualize") << tr("Version Control")
@@ -1651,6 +1653,7 @@ PreferencesPopup::PreferencesPopup()
   stackedWidget->addWidget(createGeneralPage());
   stackedWidget->addWidget(createInterfacePage());
   stackedWidget->addWidget(createPreviewPage());
+  stackedWidget->addWidget(createAudioPage());
   stackedWidget->addWidget(createLoadingPage());
   stackedWidget->addWidget(createSavingPage());
   stackedWidget->addWidget(createCodecPage());
@@ -2316,6 +2319,69 @@ QWidget* PreferencesPopup::createAnimationPage() {
       &PreferencesPopup::onModifyExpressionOnMovingReferencesChanged);
 
   return widget;
+}
+
+//-----------------------------------------------------------------------------
+
+// Built each time the page is created so devices plugged in after startup
+// appear. The stored device is kept selectable even when it is absent, so
+// opening Preferences with a headset unplugged does not silently reset it.
+static QList<ComboBoxItem> buildAudioOutputDeviceList(
+    const QString& currentName) {
+  QList<ComboBoxItem> items;
+  items.append(ComboBoxItem(PreferencesPopup::tr("System Default"), ""));
+  bool currentFound = currentName.isEmpty();
+  for (const std::wstring& name : TSoundOutputDevice::getDeviceNames()) {
+    QString qname = QString::fromStdWString(name);
+    if (qname == currentName) currentFound = true;
+    items.append(ComboBoxItem(qname, qname));
+  }
+  if (!currentFound)
+    items.append(ComboBoxItem(
+        PreferencesPopup::tr("%1 (not found)").arg(currentName), currentName));
+  return items;
+}
+
+//-----------------------------------------------------------------------------
+
+QWidget* PreferencesPopup::createAudioPage() {
+  QWidget* widget  = new QWidget(this);
+  QGridLayout* lay = new QGridLayout();
+  setupLayout(lay);
+
+  QGridLayout* playbackLay = insertGroupBox(tr("Playback"), lay);
+  {
+    insertUI(audioOutputDevice, playbackLay,
+             buildAudioOutputDeviceList(m_pref->getAudioOutputDevice()));
+
+    QPushButton* refreshButton = new QPushButton(tr("Refresh Devices"), this);
+    refreshButton->setToolTip(
+        tr("Look again for audio devices connected since this window was "
+           "opened."));
+    connect(refreshButton, &QPushButton::clicked, this,
+            &PreferencesPopup::onRefreshAudioDevices);
+    playbackLay->addWidget(refreshButton, playbackLay->rowCount(), 1, 1, 1,
+                           Qt::AlignLeft);
+  }
+
+  lay->setRowStretch(lay->rowCount(), 1);
+  insertFootNote(lay);
+  widget->setLayout(lay);
+  return widget;
+}
+
+//-----------------------------------------------------------------------------
+
+void PreferencesPopup::onRefreshAudioDevices() {
+  QComboBox* combo = getUI<QComboBox*>(audioOutputDevice);
+  // clear() would fire currentIndexChanged with no current item and write an
+  // invalid value into the preference, so the rebuild runs silently.
+  QSignalBlocker blocker(combo);
+  QString current = m_pref->getAudioOutputDevice();
+  combo->clear();
+  for (const ComboBoxItem& item : buildAudioOutputDeviceList(current))
+    combo->addItem(item.first, item.second);
+  combo->setCurrentIndex(combo->findData(current));
 }
 
 //-----------------------------------------------------------------------------

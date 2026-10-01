@@ -127,6 +127,8 @@ public:
   void setCameraUnits();
   // Saving
   void setRasterBackgroundColor();
+  // Preview
+  void setAudioOutputDevice();
 
 public:
   static Preferences *instance();
@@ -472,6 +474,9 @@ public:
   }
   int getShortPlayFrameCount() const {
     return getIntValue(shortPlayFrameCount);
+  }
+  QString getAudioOutputDevice() const {
+    return getStringValue(audioOutputDevice);
   }
   bool previewAlwaysOpenNewFlipEnabled() const {
     return getBoolValue(previewAlwaysOpenNewFlip);

@@ -232,6 +232,18 @@ bool TSoundOutputDevice::installed() { return true; }
 
 //------------------------------------------------------------------------------
 
+// Device selection is not implemented on this backend: the empty list makes
+// Preferences offer only the system default, and the chosen name is ignored.
+std::vector<std::wstring> TSoundOutputDevice::getDeviceNames() {
+  return std::vector<std::wstring>();
+}
+
+//------------------------------------------------------------------------------
+
+void TSoundOutputDevice::setPreferredDevice(const std::wstring &) {}
+
+//------------------------------------------------------------------------------
+
 bool TSoundOutputDevice::open(const TSoundTrackP &st) {
   return true;
 }

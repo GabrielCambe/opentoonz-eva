@@ -373,6 +373,20 @@ Returns true if on the machine there is an audio card installed correctly
 */
   static bool installed();
 
+  /*!
+Returns the names of the output devices available right now. Empty on
+backends that cannot choose a device, in which case playback always uses the
+system default.
+*/
+  static std::vector<std::wstring> getDeviceNames();
+
+  /*!
+Chooses the device that every player opens from now on. An empty name, or a
+name that is no longer present, means the system default. A player that is
+already open switches on its next play, never in the middle of one.
+*/
+  static void setPreferredDevice(const std::wstring &name);
+
   //! Returns the best format supported near the given parameters
   TSoundTrackFormat getPreferredFormat(TUINT32 sampleRate, int channelCount,
                                        int bitPerSample);

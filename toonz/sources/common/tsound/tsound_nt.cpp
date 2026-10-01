@@ -13,6 +13,33 @@
 
 //=========================================================
 
+namespace {
+
+// Output device chosen in Preferences; empty means the Windows default.
+// Touched only from the GUI thread: players are opened from play(), which
+// runs there, and the waveOut callback thread never reads it.
+std::wstring g_preferredOutputDevice;
+
+// waveOut addresses devices by index, and the index shifts whenever a USB
+// device is plugged or unplugged, so the name is resolved at every open.
+UINT resolveOutputDeviceId(const std::wstring &name) {
+  if (name.empty()) return WAVE_MAPPER;
+  UINT count = waveOutGetNumDevs();
+  for (UINT i = 0; i < count; ++i) {
+    WAVEOUTCAPSW caps;
+    if (waveOutGetDevCapsW(i, &caps, sizeof(caps)) != MMSYSERR_NOERROR)
+      continue;
+    if (name == caps.szPname) return i;
+  }
+  // The chosen device is gone (unplugged, disabled): play through the
+  // default rather than staying silent.
+  return WAVE_MAPPER;
+}
+
+}  // namespace
+
+//=========================================================
+
 // forward declarations
 class TSoundOutputDeviceImp;
 class TSoundInputDeviceImp;
@@ -78,6 +105,11 @@ public:
   HWAVEOUT m_wout;
   WavehdrQueue *m_whdrQueue;
   TSoundTrackFormat m_currentFormat;
+  // Device index the open handle was asked for. It is the requested index,
+  // not the one actually obtained: when the chosen device refuses to open
+  // and playback falls back to the default, retrying it on every play would
+  // cost a 300 ms reopen each time.
+  UINT m_requestedDeviceId;
   std::set<int> m_supportedRate;
 
   TThread::Mutex m_mutex;
@@ -169,7 +201,15 @@ void WavehdrQueue::put(TSoundTrackP &subTrack) {
   // alcune situazioni si fa subito waveOutWrite c'e' bisogno di controllare
   // se il formato con cui e' stato aperto in precedenza il device e' uguale
   // a quello della traccia
-  if (m_devImp->m_wout && m_devImp->m_currentFormat != subTrack->getFormat()) {
+  // The flipbook keeps its player across plays, so a device picked in
+  // Preferences is honoured by reopening here, on the same path a format
+  // change already takes.
+  bool deviceChanged =
+      m_devImp->m_wout &&
+      resolveOutputDeviceId(g_preferredOutputDevice) !=
+          m_devImp->m_requestedDeviceId;
+  if (m_devImp->m_wout &&
+      (m_devImp->m_currentFormat != subTrack->getFormat() || deviceChanged)) {
     m_devImp->doCloseDevice();
     TSystem::sleep(300);
     m_devImp->doOpenDevice(subTrack->getFormat());
@@ -468,7 +508,8 @@ TSoundOutputDeviceImp::TSoundOutputDeviceImp()
     , m_isPlaying(false)
     , m_looped(false)
     , m_scrubbing(false)
-    , m_wout(0) {
+    , m_wout(0)
+    , m_requestedDeviceId(WAVE_MAPPER) {
   m_whdrQueue = new WavehdrQueue(this, 4);
 
   insertAllRate();
@@ -502,18 +543,24 @@ bool TSoundOutputDeviceImp::doOpenDevice(const TSoundTrackFormat &format) {
   CloseHandle(CreateThread(NULL, 0, MyWaveOutCallbackThread, (LPVOID)this, 0,
                            &m_notifyThreadId));
 
-  MMRESULT ret;
-  if ((ret = waveOutOpen(&m_wout, WAVE_MAPPER, &wf, (DWORD_PTR)m_notifyThreadId,
-                         (DWORD_PTR)this, CALLBACK_THREAD)) !=
-      MMSYSERR_NOERROR) {
+  UINT devId   = resolveOutputDeviceId(g_preferredOutputDevice);
+  MMRESULT ret = waveOutOpen(&m_wout, devId, &wf, (DWORD_PTR)m_notifyThreadId,
+                             (DWORD_PTR)this, CALLBACK_THREAD);
+  if (ret != MMSYSERR_NOERROR && devId != WAVE_MAPPER) {
+    // The chosen device is present but refused the open (held exclusively
+    // by another application, or disabled since it was enumerated).
+    ret = waveOutOpen(&m_wout, WAVE_MAPPER, &wf, (DWORD_PTR)m_notifyThreadId,
+                      (DWORD_PTR)this, CALLBACK_THREAD);
+  }
+  if (ret != MMSYSERR_NOERROR) {
     while (!PostThreadMessage(m_notifyThreadId, WM_QUIT, 0, 0))
       ;
+    return false;
   }
-  if (ret != MMSYSERR_NOERROR) return false;
 
-  if (ret != MMSYSERR_NOERROR) return false;
-  m_currentFormat = format;
-  return (ret == MMSYSERR_NOERROR);
+  m_requestedDeviceId = devId;
+  m_currentFormat     = format;
+  return true;
 }
 
 //----------------------------------------------------------------------------
@@ -697,6 +744,25 @@ bool TSoundOutputDevice::installed() {
   int ndev = waveOutGetNumDevs();
   if (ndev <= 0) return false;
   return true;
+}
+
+//------------------------------------------------------------------------------
+
+std::vector<std::wstring> TSoundOutputDevice::getDeviceNames() {
+  std::vector<std::wstring> names;
+  UINT count = waveOutGetNumDevs();
+  for (UINT i = 0; i < count; ++i) {
+    WAVEOUTCAPSW caps;
+    if (waveOutGetDevCapsW(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+      names.push_back(caps.szPname);
+  }
+  return names;
+}
+
+//------------------------------------------------------------------------------
+
+void TSoundOutputDevice::setPreferredDevice(const std::wstring &name) {
+  g_preferredOutputDevice = name;
 }
 
 //------------------------------------------------------------------------------
