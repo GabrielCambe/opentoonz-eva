@@ -1741,8 +1741,8 @@ void CellArea::drawSoundCell(QPainter &p, int row, int col, bool isReference) {
   if (gainDb != 0.0) {
     // Boosts tint warm and cuts tint cool, so the column reads at a glance.
     bool boost = gainDb > 0.0;
-    p.fillRect(trackRect, boost ? QColor(255, 140, 0, 60)
-                                : QColor(60, 140, 255, 60));
+    p.fillRect(trackRect,
+               boost ? QColor(255, 140, 0, 60) : QColor(60, 140, 255, 60));
     // The label only fits where the track is wide enough; the horizontal
     // timeline shows the tint alone.
     if (soundColumn->isGainSectionStart(row) && trackRect.width() >= 30) {
@@ -1751,8 +1751,9 @@ void CellArea::drawSoundCell(QPainter &p, int row, int col, bool isReference) {
       labelFont.setPixelSize(9);
       p.setFont(labelFont);
       p.setPen(boost ? QColor(255, 190, 90) : QColor(140, 190, 255));
-      p.drawText(trackRect.adjusted(2, 0, 0, 0), Qt::AlignLeft | Qt::AlignTop,
-                 QString("%1%2dB").arg(boost ? "+" : "").arg(gainDb, 0, 'f', 1));
+      p.drawText(
+          trackRect.adjusted(2, 0, 0, 0), Qt::AlignLeft | Qt::AlignTop,
+          QString("%1%2dB").arg(boost ? "+" : "").arg(gainDb, 0, 'f', 1));
       p.setFont(savedFont);
     }
   }

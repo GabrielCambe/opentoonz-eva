@@ -145,8 +145,8 @@ DVAPI TSoundTrackP gain(const TSoundTrackP &src,
     Peak and RMS pressure of src over the samples [s0, s1], taken across
     every channel. Returns false when the range holds no samples.
   */
-DVAPI bool measure(const TSoundTrackP &src, TINT32 s0, TINT32 s1,
-                   double &peak, double &rms);
+DVAPI bool measure(const TSoundTrackP &src, TINT32 s0, TINT32 s1, double &peak,
+                   double &rms);
 
 /*!
     Pressure of a full-scale sample in the given format, so that

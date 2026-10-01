@@ -32,8 +32,7 @@ class SoundGainPopup final : public DVGui::Dialog {
   bool m_removeRequested;
 
 public:
-  SoundGainPopup(TXsheet *xsh, const std::vector<int> &columns, int r0,
-                 int r1);
+  SoundGainPopup(TXsheet *xsh, const std::vector<int> &columns, int r0, int r1);
 
   //! 0 when "Remove Gain" was pressed, otherwise the entered value.
   double getGainDb() const;

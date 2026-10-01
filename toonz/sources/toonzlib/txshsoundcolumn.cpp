@@ -110,8 +110,7 @@ void ColumnLevel::setGainSections(
     const std::vector<SoundGainSection> &sections) {
   std::vector<SoundGainSection> sorted;
   for (const SoundGainSection &s : sections)
-    if (s.m_endFrame > s.m_startFrame && s.m_gainDb != 0.0)
-      sorted.push_back(s);
+    if (s.m_endFrame > s.m_startFrame && s.m_gainDb != 0.0) sorted.push_back(s);
   std::sort(sorted.begin(), sorted.end(),
             [](const SoundGainSection &a, const SoundGainSection &b) {
               return a.m_startFrame < b.m_startFrame;
@@ -166,7 +165,8 @@ std::vector<TSop::GainRange> ColumnLevel::getGainRanges(
   std::vector<TSop::GainRange> ranges;
   for (const SoundGainSection &s : m_gainSections) {
     TINT32 a = std::max<TINT32>((TINT32)(s.m_startFrame * samplePerFrame), s0);
-    TINT32 b = std::min<TINT32>((TINT32)(s.m_endFrame * samplePerFrame), s1 + 1);
+    TINT32 b =
+        std::min<TINT32>((TINT32)(s.m_endFrame * samplePerFrame), s1 + 1);
     if (b <= a) continue;
     ranges.push_back({a - s0, b - s0, std::pow(10.0, s.m_gainDb / 20.0)});
   }

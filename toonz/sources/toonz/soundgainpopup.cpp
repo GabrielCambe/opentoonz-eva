@@ -44,7 +44,7 @@ SoundGainPopup::SoundGainPopup(TXsheet *xsh, const std::vector<int> &columns,
   bool uniform     = true;
   bool first       = true;
   for (int c : columns) {
-    TXshColumn *column = xsh->getColumn(c);
+    TXshColumn *column  = xsh->getColumn(c);
     TXshSoundColumn *sc = column ? column->getSoundColumn() : nullptr;
     if (!sc) continue;
     double peak, rms;
@@ -75,16 +75,16 @@ SoundGainPopup::SoundGainPopup(TXsheet *xsh, const std::vector<int> &columns,
     scope += tr(" in %1 sound columns").arg((int)columns.size());
   QLabel *scopeLbl = new QLabel(scope, this);
 
-  QLabel *measureLbl = new QLabel(
-      m_hasAudio ? tr("Before gain: peak %1, RMS %2")
-                       .arg(formatDb(m_peakDb))
-                       .arg(formatDb(rmsDb))
-                 : tr("No audio under the selected rows."),
-      this);
-  QLabel *currentLbl = new QLabel(
-      uniform ? tr("Current gain: %1 dB").arg(currentDb, 0, 'f', 1)
-              : tr("Current gain: mixed"),
-      this);
+  QLabel *measureLbl =
+      new QLabel(m_hasAudio ? tr("Before gain: peak %1, RMS %2")
+                                  .arg(formatDb(m_peakDb))
+                                  .arg(formatDb(rmsDb))
+                            : tr("No audio under the selected rows."),
+                 this);
+  QLabel *currentLbl =
+      new QLabel(uniform ? tr("Current gain: %1 dB").arg(currentDb, 0, 'f', 1)
+                         : tr("Current gain: mixed"),
+                 this);
   m_resultLbl = new QLabel(this);
 
   QGridLayout *lay = new QGridLayout();

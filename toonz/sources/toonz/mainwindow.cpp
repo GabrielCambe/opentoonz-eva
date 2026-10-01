@@ -2540,8 +2540,8 @@ void MainWindow::defineActions() {
   createMenuCellsAction(MI_Rolldown, QT_TR_NOOP("&Roll Down"), "", "rolldown");
   createMenuCellsAction(MI_TimeStretch, QT_TR_NOOP("&Time Stretch..."), "",
                         "time_stretch");
-  createMenuCellsAction(MI_AdjustSoundGain,
-                        QT_TR_NOOP("Adjust Sound &Gain..."), "");
+  createMenuCellsAction(MI_AdjustSoundGain, QT_TR_NOOP("Adjust Sound &Gain..."),
+                        "");
   createMenuCellsAction(MI_CreateBlankDrawing,
                         QT_TR_NOOP("&Create Blank Drawing"), "Alt+D",
                         "add_cell");

@@ -1636,11 +1636,11 @@ PreferencesPopup::PreferencesPopup()
   QListWidget* categoryList = new QListWidget(this);
   QStringList categories;
   categories << tr("General") << tr("Interface") << tr("Preview/Render")
-             << tr("Audio") << tr("Load/Import") << tr("Saving") << tr("Decoder/Encoder")
-             << tr("Drawing") << tr("Tools") << tr("Xsheet") << tr("Onion Skin")
-             << tr("Animation") << tr("Auto Lip-Sync") << tr("Colors")
-             << tr("Vector Visualize") << tr("Version Control")
-             << tr("Touch/Tablet Settings");
+             << tr("Audio") << tr("Load/Import") << tr("Saving")
+             << tr("Decoder/Encoder") << tr("Drawing") << tr("Tools")
+             << tr("Xsheet") << tr("Onion Skin") << tr("Animation")
+             << tr("Auto Lip-Sync") << tr("Colors") << tr("Vector Visualize")
+             << tr("Version Control") << tr("Touch/Tablet Settings");
 #ifdef _WIN32
   categories << tr("Addons");
 #endif
