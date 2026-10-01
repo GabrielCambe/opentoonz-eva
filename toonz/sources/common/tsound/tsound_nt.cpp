@@ -205,9 +205,8 @@ void WavehdrQueue::put(TSoundTrackP &subTrack) {
   // Preferences is honoured by reopening here, on the same path a format
   // change already takes.
   bool deviceChanged =
-      m_devImp->m_wout &&
-      resolveOutputDeviceId(g_preferredOutputDevice) !=
-          m_devImp->m_requestedDeviceId;
+      m_devImp->m_wout && resolveOutputDeviceId(g_preferredOutputDevice) !=
+                              m_devImp->m_requestedDeviceId;
   if (m_devImp->m_wout &&
       (m_devImp->m_currentFormat != subTrack->getFormat() || deviceChanged)) {
     m_devImp->doCloseDevice();
