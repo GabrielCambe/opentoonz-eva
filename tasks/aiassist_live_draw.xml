@@ -1,0 +1,344 @@
+<task id="aiassist-live-draw" status="completed">
+  <description>
+    Fazer o modo ao vivo do painel AI Assist regenerar quando o usuario DESENHA, e nao so
+    quando digita no prompt. Hoje o gatilho e QLineEdit::textEdited; este trabalho acrescenta
+    o desenho corrente como segunda fonte de disparo, reaproveitando o debounce, a coalescencia
+    e a garantia de um job em voo que ja existem. Ao contrario da task sdxl-setup, esta ALTERA
+    C++ do painel.
+  </description>
+
+  <notes>
+    Task profile: change
+    Risk level: medium
+    Process weight: standard
+    Execution mode: governed-xml
+    Execution autonomy: interactive
+    Approval mode: autonomous-gated (mudado pelo usuario em 2026-09-03 21:0x, a pedido)
+    Delivery mode: iterative
+    Validation policy: standard
+    Intent: tasks/knowledge/aiassist_live_draw__intent.md
+    Design guidance: resolvido no p1, ver tasks/knowledge/aiassist_live_draw__design.md
+    Knowledge index: enabled
+    Knowledge index backend: sqlite-vec
+
+    Por que medium e nao low: o risco dominante nao e a edicao em si, sao dois modos de falha
+    que so aparecem em execucao. (1) Laco de realimentacao: onInsertAsLevel grava um PNG em
+    +drawings e manda o OpenToonz carregar, o que altera o level set e pode emitir o mesmo
+    sinal que vira gatilho. Um laco aqui nao trava a interface, ele martela a GPU em silencio.
+    (2) Perda silenciosa: ver o achado do scan, abaixo. Ambos passam despercebidos numa
+    revisao de diff e so aparecem usando.
+
+    ACHADO DO SCAN PRELIMINAR, e o motivo de o plano ter uma fase so para coalescencia:
+    coalesceLive() em toonz/sources/aiassist/aiassistcontroller.cpp:242 decide se re-dispara
+    comparando m_promptField-text() com m_submittedPrompt. A coalescencia e chaveada no TEXTO
+    DO PROMPT. Com gatilho por desenho o prompt nao muda entre geracoes, entao a comparacao
+    retorna cedo e a coalescencia nunca re-dispara: desenhar durante uma geracao perderia a
+    mudanca sem aviso. Nao e "so mais um connect".
+
+    O que ja existe e NAO precisa ser construido (verificado no scan, com file:line):
+    - captura do desenho corrente: currentFrameAsPngBase64(), atras do m_useReferenceCheck
+      (aiassistcontroller.cpp:90 e :593);
+    - debounce de 300 ms single-shot: m_debounce (aiassistcontroller.cpp:98-100);
+    - um job em voo sempre: guarda m_client-isBusy() em maybeGenerateLive()
+      (aiassistcontroller.cpp:230);
+    - coalescencia no fim do ciclo: coalesceLive(), chamada em :630;
+    - conexao ja existente a TXshLevelHandle, porem em xshLevelSwitched (:179).
+    O sinal que falta e TXshLevelHandle::xshLevelChanged(), declarado em
+    toonz/sources/include/toonz/txshlevelhandle.h:47.
+
+    Numeros que decidem o escopo, medidos na task sdxl-setup (secao 5 de
+    tasks/knowledge/aiassist__sdxl_notes.md): sd15_scribble_img2img 1,2 s;
+    sdxl_lightning_t2i 5,8 s; sdxl_base_cnet 36 s. O recurso e util na rota SD 1.5.
+    Toda verificacao deve usar um grafo sd15_*, senao o ciclo de teste fica insuportavel.
+
+    Como rodar o que for construido: o build fica em toonz/build/Release/OpenToonz.exe, e o
+    painel em Windows to AI Assist. O ComfyUI precisa estar de pe em 127.0.0.1:8188; se nao
+    estiver, subir com
+      C:\ProgramData\CreatorSpaceFramework\ComfyUI\python_embeded\python.exe -s
+      C:\ProgramData\CreatorSpaceFramework\ComfyUI\ComfyUI\main.py --windows-standalone-build --port 8188
+    O oraculo tools/aiassist_oracle.py NAO serve aqui: ele valida grafo, e o que muda nesta
+    task e o gatilho da interface. A verificacao e no painel, desenhando.
+
+    Assumido sem perguntar (o p1 confirma):
+    - [media] um unico checkbox Live cobrindo os dois gatilhos, em vez de um segundo checkbox;
+    - [media] o criterio isLiveCapable() continua por passos nesta task; troca-lo afetaria
+      tambem o gatilho por texto, que funciona hoje, e isso e escopo separado.
+
+    Progress:
+    - p1 executado e aprovado pelo usuario. Tres artefatos escritos, nenhum codigo alterado.
+    - p2, p3 e p4 com o codigo implementado e compilando limpo. Aguardam a verificacao por
+      execucao, que e do usuario. Ver [ESCALATE] abaixo.
+
+    Decisions:
+    [MEDIUM] 2026-09-03 20:54
+      problem: qual pausa depois do ultimo traco, dado que xshLevelChanged chega uma vez por
+        traco concluido (cadeia inputmanager.cpp:276 -> toonzrasterbrushtool.cpp:1301 ->
+        tool.cpp:779 -> txshlevelhandle.h:40), nao por evento de movimento.
+      options: 300 ms igual ao texto; 600 ms so para desenho; 1000 ms; calibrar no p2.
+      decision+rationale: 600 ms so para o desenho, mantendo 300 ms para o texto, com um unico
+        QTimer e o intervalo escolhido na chamada start(). 300 ms dispararia ao hachurar
+        geracoes que a coalescencia descarta (~1,2 s de GPU cada, e por I1 bloqueando a
+        seguinte); 1000 ms custa sensacao de resposta. Escolhido pelo usuario.
+      status: decidido; o valor final e resultado do p4-s6.
+    [MEDIUM] 2026-09-03 20:54
+      problem: um checkbox Live cobrindo os dois gatilhos, ou um segundo checkbox.
+      options: um checkbox com rotulo ajustado; dois checkboxes independentes; um checkbox mais
+        um combo de gatilho.
+      decision+rationale: um checkbox so. Mantem liveIsActive() como unico predicado, entao I3
+        fica garantido num lugar so em vez de depender de dois predicados corretos; dois
+        checkboxes dariam quatro combinacoes de estado para o statusLabel descrever, o que
+        torna SC6 dificil sem texto confuso. Escolhido pelo usuario.
+      status: decidido.
+    [HIGH] 2026-09-03 20:54
+      problem: a premissa de I2 estava errada. O p1-s2 mostrou que Insert as Level NAO emite
+        xshLevelChanged (IoCmd::loadResources, iocommand.cpp:2465-2729, nao toca o level
+        handle), mas beforeCellsInsert move a coluna corrente para a coluna do PNG gerado
+        (iocommand.cpp:355) e a referencia sai justamente da coluna corrente
+        (aiassistcontroller.cpp:446-455). O laco nao e por sinal, e de conteudo: a saida da IA
+        vira a entrada da proxima geracao, inclusive pelo gatilho por texto que ja existe hoje.
+      options: so flag de supressao; so teste sobre o nivel corrente; as duas; as duas mais
+        restaurar a coluna corrente depois da insercao.
+      decision+rationale: flag de supressao mais teste de nivel aiassist_*.png em +drawings. A
+        flag sozinha nao cobre o problema, que persiste depois que ela e desligada; o teste
+        sozinho abriria mao da protecao caso loadResources passe a notificar. Restaurar a
+        coluna altera comportamento existente de Insert as Level, fora do escopo declarado.
+        Escolhido pelo usuario.
+      status: decidido; implementacao no p4.
+    [MEDIUM] 2026-09-03 20:54
+      problem: maybeGenerateLive retorna cedo com prompt vazio (aiassistcontroller.cpp:223), o
+        que impediria gerar desenhando sem digitar nada.
+      options: manter a guarda; relaxar para todos os gatilhos; relaxar so para o gatilho por
+        desenho, condicionado a referencia em uso.
+      decision+rationale: relaxar so para o desenho. Relaxar para todos mudaria o caminho do
+        texto - apagar o prompt inteiro passaria a disparar -, e SC5 exige que a digitacao
+        continue exatamente como hoje. Decidido pelo executor a partir do achado do p1; e a
+        sub-decisao que p2-s2 delega ao design.
+      status: decidido; registrado como D5 no design.
+    [LOW] 2026-09-03 20:54 A4 adiado sem mudanca, conforme o Intent Brief: isLiveCapable() e
+      comum aos dois gatilhos e troca-lo mexeria no gatilho por texto, que funciona hoje.
+
+    Assumptions:
+    - nenhuma pendente no p1: as quatro ambiguidades estao decididas.
+
+    Follow-ups (fora do escopo declarado, nao executar nesta task):
+    - Insert as Level move o foco de edicao do usuario sem ele pedir, porque beforeCellsInsert
+      chama setColumnIndex (iocommand.cpp:355). Restaurar a coluna corrente ao fim da insercao
+      atacaria a causa da realimentacao de conteudo, em vez do sintoma. Comportamento anterior
+      a esta task.
+    - Com um checkbox so (D2), quem quer apenas o gatilho por texto perde essa opcao. Se
+      incomodar no uso, avaliar a opcao do combo de gatilho.
+
+    Checkpoint (p1): fase de decisao, sem incremento executavel - nada a rodar. Os tres
+      artefatos sao o entregavel. O primeiro checkpoint rodavel e o do p2.
+
+    [ESCALATE] 2026-09-03 21:12 verificacao por execucao adiada, nao dispensada.
+      O usuario passou o plano para autonomous-gated e saiu. Os passos p2-s4, p3-s4 e p4-s4 sao
+      verify method="run": exigem uma pessoa desenhando com ponteiro no build compilado, e
+      computer-use nao alcanca este build local. Nao existe substituto honesto - compilar nao
+      prova SC1, e ler o codigo nao prova SC2.
+      O que foi feito em vez de parar: implementar e compilar as tres fases de codigo, para que
+      uma unica sessao de desenho no retorno verifique tudo. p4-s4 ja era, por construcao, o
+      roteiro dos seis criterios.
+      Consequencia assumida: p2, p3 e p4 ficam em awaiting-approval com os gates NAO decididos.
+      Nenhum gate foi aprovado sem a evidencia que a propria fase exige. A raiz continua
+      in-progress.
+
+    Knowledge index sync (p4-s7):
+    - backend: sqlite-vec
+    - schema_version: 1
+    - added: 3 (options.md, loop_paths.md, design.md)
+    - updated: 0
+    - removed: 0
+    - receipt_ts: 2026-09-04T00:06:03Z
+    - estado final: files_indexed 26, chunks_indexed 538 (antes 23 / 508)
+    - nota: a primeira chamada aceitou so o ultimo --path dos tres, e o recibo veio added=1. Os
+      outros dois foram sincronizados individualmente e o caminho de leitura foi conferido com
+      um query, que devolve loop_paths.md com stale_dropped=0. Quem for scriptar isto: uma
+      chamada por arquivo.
+
+    Checkpoint (p2): build em toonz/build/Release/OpenToonz.exe (ou run-release.bat). Windows to
+      AI Assist, grafo sd15_scribble_img2img, ligar Live, desenhar um traco. VERIFICADO pelo
+      usuario em 2026-09-03 21:2x: dispara sem tocar no prompt nem no Generate, e os 600 ms
+      foram aprovados sem pedido de ajuste.
+    Checkpoint (p3): desenhando continuamente por ~10 s. VERIFICADO pelo usuario: as geracoes
+      nao se acumulam e o resultado acompanha o ultimo estado do desenho.
+    Checkpoint (p4): gerar, Insert as Level, conferir que inserir nao dispara e que a nota de
+      status descreve as duas pausas. VERIFICADO pelo usuario, junto com o roteiro dos seis
+      criterios.
+    Checkpoint (p5): VERIFICADO pelo usuario em 2026-09-03 - Ctrl+Z regenera e Insert as Level
+      continua sem disparar. Cobertura dos criterios: SC1 a SC6 pelo roteiro do p4-s4, SC7 aqui.
+
+    Knowledge index sync (final, apos p5): backend sqlite-vec, schema_version 1, added 0,
+      updated 2 (intent.md, design.md), removed 0, receipt_ts 2026-09-04T00:36:50Z.
+      Estado: files_indexed 26, chunks_indexed 539.
+
+    Cobertura dos criterios de sucesso: SC1 e SC4 em p2; SC2 e SC5 em p3; SC3 e SC6 em p4;
+      SC7 e SC3-sob-o-caminho-novo em p5. Nenhum criterio sem fase que o cite.
+
+    Change explainer: tasks/knowledge/aiassist_live_draw__explanation.md
+
+    Next: task concluida. Os quatro Follow-ups estao no explainer, secao 8, cada um pronto para
+      virar task propria.
+
+    Artifacts:
+    - tasks/knowledge/aiassist_live_draw__options.md
+    - tasks/knowledge/aiassist_live_draw__loop_paths.md
+    - tasks/knowledge/aiassist_live_draw__design.md
+  </notes>
+
+  <agents>
+    <agent name="xml-knowledge-indexer" role="indexer" />
+  </agents>
+
+  <input>
+    <file path="tasks/knowledge/aiassist_live_draw__intent.md">Intent Brief: goal, SC1 a SC6, nao-objetivos, invariantes I1 a I4 e as quatro ambiguidades.</file>
+    <file path="toonz/sources/aiassist/aiassistcontroller.cpp">O painel. Alvos: construcao das conexoes (linhas 144-185), liveIsActive (213), maybeGenerateLive (222), coalesceLive (236), onTemplateChanged (250-290), onGenerate (586-630), onInsertAsLevel.</file>
+    <file path="toonz/sources/aiassist/aiassistcontroller.h">Declaracoes dos slots e do estado do painel.</file>
+    <file path="toonz/sources/include/toonz/txshlevelhandle.h">Linha 47: o sinal xshLevelChanged(), que e o gatilho que falta.</file>
+    <file path="tasks/knowledge/aiassist__sdxl_notes.md">Secao 5: os tempos medidos que definem quais grafos valem no modo ao vivo.</file>
+    <file path="tasks/knowledge/aiassist__comfyui_protocol.md">Contrato da API e dos marcadores, para nao quebrar I4.</file>
+  </input>
+
+  <phases>
+
+    <phase id="p1" status="completed">
+      <description>Decidir as questoes de design antes de escrever codigo. Sao quatro, e duas delas mudam o formato da solucao.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist_live_draw__intent.md">Secao 5: a tabela de ambiguidades A1 a A4.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Para ancorar as opcoes no codigo real.</file>
+      </input>
+      <steps>
+        <step id="p1-s1" tag="research" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp" writes="tasks/knowledge/aiassist_live_draw__options.md">Levantar, no codigo, o que exatamente emite xshLevelChanged durante um traco: se dispara por traco, por pincelada ou so ao soltar o pincel. Disso depende toda a calibragem de A1. Registrar com file:line.</step>
+        <step id="p1-s2" tag="research" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp" writes="tasks/knowledge/aiassist_live_draw__loop_paths.md">Mapear o caminho de onInsertAsLevel ate o level set: o que ele emite, e se o nivel inserido vira o nivel corrente. E o que determina se A3 precisa de flag de supressao ou de um teste sobre o nivel.</step>
+        <step id="p1-s3" tag="analyze" status="completed" reads="tasks/knowledge/aiassist_live_draw__options.md,tasks/knowledge/aiassist_live_draw__loop_paths.md" writes="tasks/knowledge/aiassist_live_draw__options.md">Escrever pelo menos duas alternativas com tradeoffs para A3 (guarda contra laco) e para A2 (um checkbox ou dois). Uma opcao so nao e decisao, e um padrao disfarcado.</step>
+        <step id="p1-s4" tag="ask_for_guidance" status="completed">Perguntar ao usuario A1 (a pausa depois do ultimo traco, que so ele pode calibrar porque depende de como ele desenha) e A2 (um checkbox ou dois). Levar as alternativas do p1-s3, nao perguntas abertas.</step>
+        <step id="p1-s5" tag="document" status="completed" reads="tasks/knowledge/aiassist_live_draw__options.md" writes="tasks/knowledge/aiassist_live_draw__design.md">Registrar as quatro decisoes com a razao de cada uma. E o insumo das fases seguintes.</step>
+      </steps>
+      <output>
+        <file path="tasks/knowledge/aiassist_live_draw__options.md">Alternativas e tradeoffs de A2 e A3.</file>
+        <file path="tasks/knowledge/aiassist_live_draw__loop_paths.md">O caminho de insercao e o que ele emite.</file>
+        <file path="tasks/knowledge/aiassist_live_draw__design.md">As quatro decisoes, com razao.</file>
+      </output>
+      <review status="completed">Criterio cumprido. As quatro ambiguidades estao decididas em aiassist_live_draw__design.md (D1 a D4), mais D5, que e a sub-decisao que p2-s2 delega ao design. Cada decisao cita codigo verificado: a granularidade do sinal foi rastreada de inputmanager.cpp:276 ate txshlevelhandle.h:40, e o caminho de insercao de aiassistcontroller.cpp:655 ate iocommand.cpp:355. A2 tem tres alternativas comparadas e A3 tem quatro (options.md secoes 3 e 4). A1 foi escolhida pelo usuario em 2026-09-03 20:54, junto com A2 e A3. Nenhum arquivo de codigo foi alterado: os tres unicos arquivos escritos sao os artefatos declarados em output.
+    Achado que altera a premissa do Intent Brief, registrado como [HIGH] em root notes: o laco por sinal que I2 temia nao existe - Insert as Level nao emite xshLevelChanged. O risco real e a coluna corrente ir parar no PNG gerado, o que faz a saida virar entrada. A decisao de A3 foi tomada contra esse risco, nao contra o que o Brief supunha.
+    Post-condition dos outputs conferido antes do gate: options.md 8499 B, loop_paths.md 6147 B, design.md 7955 B - os tres existem e nao estao vazios.</review>
+      <approval required_by="user" status="approved">Approved by user, 2026-09-03 20:57 ("aprovado"). Sem condicoes nem ajustes pedidos.</approval>
+    </phase>
+
+    <phase id="p2" status="completed">
+      <description>Esqueleto andante: o gatilho por desenho ligado e funcionando de ponta a ponta, no caminho mais simples possivel. Deliberadamente ignora coalescencia e laco - as duas fases seguintes tratam disso.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist_live_draw__design.md">Decisoes do p1.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Conexoes em 144-185, ao lado da conexao de textEdited.</file>
+        <file path="toonz/sources/include/toonz/txshlevelhandle.h">Linha 47.</file>
+      </input>
+      <steps>
+        <step id="p2-s1" tag="edit_file" status="completed" reads="tasks/knowledge/aiassist_live_draw__design.md" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Conectar TXshLevelHandle::xshLevelChanged ao mesmo m_debounce que o textEdited usa, com a mesma guarda liveIsActive(). Respeitar I3: com o Live desligado a lambda retorna antes de qualquer trabalho.</step>
+        <step id="p2-s2" tag="edit_file" status="completed" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Ajustar a condicao de maybeGenerateLive que hoje exige prompt nao vazio. Desenhando sem prompt o pedido ainda faz sentido; decidir conforme o design do p1 e nao por inercia.</step>
+        <step id="p2-s3" tag="use_tool" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp">Compilar o build Release.</step>
+        <step id="p2-s4" tag="verify" method="run" status="completed">RODAR: abrir toonz/build/Release/OpenToonz.exe, Windows to AI Assist, selecionar sd15_scribble_img2img, ligar Live, desenhar um traco. Evidencia exigida: a geracao dispara sem tocar no prompt nem no Generate. Prova SC1. Registrar o que foi observado, nao "funcionou".
+          DESBLOQUEADO 2026-09-03 21:2x: o usuario rodou o roteiro consolidado do p4-s4 e reportou SC1 e SC4 conformes. EVIDENCIA 2026-09-03 21:2x, relatada pelo usuario apos rodar o build: os seis criterios do roteiro do p4-s4 se comportaram como esperado, e a pausa de 600 ms foi aprovada sem pedido de ajuste. A mesma sessao revelou uma lacuna que NAO esta entre SC1 a SC6: Ctrl+Z depois de um traco nao regenera. Virou SC7 no Intent Brief e a fase p5; nao invalida o que esta fase entregou.
+          Evidencia que FOI obtida nesta fase, e que nao substitui a execucao: build Release limpo em 2026-09-03 20:59, sem erros, com re-execucao incremental no-op (exit 0).</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Gatilho por desenho conectado.</file>
+      </output>
+      <review status="completed">Aprovado por xml-autonomous-approver, 2026-09-03 21:3x.
+      Evidencia: o usuario rodou o build e reportou SC1 e SC4 conformes, com os 600 ms aprovados sem ajuste; o checkpoint de p2 em root notes registra o observado. Outputs conferidos: aiassistcontroller.cpp existe e contem o gatilho (onDrawingChanged ligado a xshLevelChanged). Build Release limpo. I3 conferido por leitura: a guarda liveIsActive() e a primeira instrucao do caminho, antes de qualquer rasterizacao.
+      Nota de escopo, nao defeito: a lacuna do Ctrl+Z encontrada na mesma sessao nao e falha desta fase - SC1 falava em traco e foi cumprido ao pe da letra. O criterio mais largo virou SC7 por revisao do Intent Brief e e trabalho de p5. Rejeitar p2 por isso seria confundir mudanca de escopo com defeito.
+      Criterio original: Prova SC1 e SC4. O incremento roda: desenhar dispara geracao com o Live ligado, e com o Live desligado o painel se comporta como antes. Sabidamente incompleto quanto a SC2 e SC3, que sao das proximas fases - isso e esperado, nao um defeito desta fase.</review>
+      <approval required_by="ai-approver" status="approved">Aprovado automaticamente apos conferencia de artefatos e da evidencia de execucao reportada pelo usuario.</approval>
+    </phase>
+
+    <phase id="p3" status="completed">
+      <description>Coalescencia. Fazer com que desenhar durante uma geracao em voo nao seja perdido em silencio - o defeito que o scan preliminar encontrou.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist_live_draw__intent.md">Secao 6: por que a coalescencia atual nao cobre o gatilho por desenho.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">coalesceLive em 236-243 e o ponto onde m_submittedPrompt e escrito, em 615.</file>
+      </input>
+      <steps>
+        <step id="p3-s1" tag="edit_file" status="completed" writes="toonz/sources/aiassist/aiassistcontroller.h">Acrescentar o estado que registra a identidade da referencia submetida, ao lado de m_submittedPrompt. Barato de calcular: o proprio base64 ja e produzido no ciclo, entao um hash dele basta e nao exige rasterizar de novo.</step>
+        <step id="p3-s2" tag="edit_file" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.h" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Gravar essa identidade junto com m_submittedPrompt no onGenerate, e estender a condicao de coalesceLive para re-disparar quando o TEXTO ou a REFERENCIA mudaram desde a ultima submissao.</step>
+        <step id="p3-s3" tag="use_tool" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp" writes="toonz/build/Release/OpenToonz.exe">Compilar o build Release.</step>
+        <step id="p3-s4" tag="verify" method="run" status="completed">RODAR: com sd15 e Live ligado, desenhar continuamente por uns 10 s. Evidencia exigida: as geracoes nao se acumulam, o resultado final corresponde ao ultimo estado do desenho, e nao a um estado antigo. Prova SC2 e confirma que I1 nao foi enfraquecida.
+          DESBLOQUEADO 2026-09-03 21:2x: verificado junto com o roteiro do p4-s4; SC2 conforme, sem acumulo de geracoes. EVIDENCIA 2026-09-03 21:2x, relatada pelo usuario apos rodar o build: os seis criterios do roteiro do p4-s4 se comportaram como esperado, e a pausa de 600 ms foi aprovada sem pedido de ajuste. A mesma sessao revelou uma lacuna que NAO esta entre SC1 a SC6: Ctrl+Z depois de um traco nao regenera. Virou SC7 no Intent Brief e a fase p5; nao invalida o que esta fase entregou.
+          Evidencia obtida sem executar: build Release limpo. E a conferencia estatica de SC5, que esta fase exige explicitamente por mexer no caminho comum: digitando sem desenhar, m_drawSerial nunca avanca, entao drawingChanged e falso e a condicao de coalesceLive reduz exatamente a comparacao de texto que existia antes; armLive(Text) usa 300 ms, o mesmo intervalo de antes. I1 intocado: a guarda m_client-isBusy() em maybeGenerateLive nao foi alterada.</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Coalescencia estendida a referencia.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.h">Estado da referencia submetida.</file>
+      </output>
+      <review status="completed">Aprovado por xml-autonomous-approver, 2026-09-03 21:3x.
+      Evidencia: o usuario verificou SC2 no build - desenhar durante uma geracao nao acumula geracoes e o resultado acompanha o ultimo estado. SC5 conferido explicitamente, como esta fase exige por mexer no caminho comum: digitando sem desenhar m_drawSerial nunca avanca, drawingChanged e falso e a condicao reduz exatamente a comparacao de texto anterior, com os mesmos 300 ms. I1 intocado - a guarda isBusy() nao foi alterada. Outputs conferidos: .cpp e .h contem o estado de coalescencia.
+      Criterio original: Prova SC2 e preserva I1. Desenhar durante uma geracao nao perde a mudanca nem enfileira geracoes. O comportamento do gatilho por texto continua identico - SC5 conferido explicitamente, porque esta fase mexe no caminho comum aos dois gatilhos.</review>
+      <approval required_by="ai-approver" status="approved">Aprovado automaticamente apos conferencia de artefatos e da evidencia de execucao reportada pelo usuario.</approval>
+    </phase>
+
+    <phase id="p4" status="completed">
+      <description>Guarda contra o laco de realimentacao, texto de status honesto, e fechamento. A fase que impede o modo de falha silencioso.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist_live_draw__loop_paths.md">O caminho de insercao mapeado no p1.</file>
+        <file path="tasks/knowledge/aiassist_live_draw__design.md">A decisao de A3.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">onInsertAsLevel e onTemplateChanged, em 250-290.</file>
+      </input>
+      <steps>
+        <step id="p4-s1" tag="edit_file" status="completed" reads="tasks/knowledge/aiassist_live_draw__design.md" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Implementar a guarda decidida em A3, para que Insert as Level nao dispare geracao. Cumpre I2.</step>
+        <step id="p4-s2" tag="edit_file" status="completed" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Atualizar a nota de status: hoje ela diz "regenerates 300 ms after you stop typing" (linha 285) e a de Live desligado fala em passos. Com dois gatilhos e possivelmente outra pausa, esse texto passa a mentir. Cumpre SC6.</step>
+        <step id="p4-s3" tag="use_tool" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp" writes="toonz/build/Release/OpenToonz.exe">Compilar o build Release.</step>
+        <step id="p4-s4" tag="verify" method="run" status="completed">EXECUTADO 2026-09-03 21:2x pelo usuario. EVIDENCIA 2026-09-03 21:2x, relatada pelo usuario apos rodar o build: os seis criterios do roteiro do p4-s4 se comportaram como esperado, e a pausa de 600 ms foi aprovada sem pedido de ajuste. A mesma sessao revelou uma lacuna que NAO esta entre SC1 a SC6: Ctrl+Z depois de um traco nao regenera. Virou SC7 no Intent Brief e a fase p5; nao invalida o que esta fase entregou.
+          RODAR o roteiro completo: desenhar dispara (SC1); desenhar durante geracao coalesce (SC2); Insert as Level NAO dispara (SC3); Live desligado nao muda nada (SC4); digitar no prompt continua disparando (SC5); a nota de status descreve o gatilho vigente (SC6). Registrar o observado em cada um dos seis.</step>
+        <step id="p4-s5" tag="verify" method="static" status="completed">Conferir que os sete grafos JSON continuam intactos e que nenhum arquivo fora de aiassistcontroller.cpp/.h foi alterado. Cumpre I4.
+          EVIDENCIA 2026-09-03 21:12. Os sete JSON foram lidos e validados: sd15_cfg_txt2img 7 nos; sd15_scribble_img2img 14; sd15_scribble_txt2img 8; sdxl_base_cnet 11; sdxl_base_t2i 11; sdxl_lightning_cnet 12; sdxl_lightning_t2i 12. Marcadores presentes e inalterados (AI_PROMPT, AI_NEGATIVE, AI_SAMPLER, AI_OUTPUT, e AI_REFERENCE/AI_CONTROL/AI_SCALE onde ja existiam). Nenhum grafo tem mtime desta sessao.
+          Arquivos de codigo alterados na task, por mtime posterior a 20:58: exatamente toonz/sources/aiassist/aiassistcontroller.cpp e toonz/sources/aiassist/aiassistcontroller.h. O git status confirma que o conjunto de arquivos nao versionados e identico ao do inicio da sessao. I4 cumprido.</step>
+        <step id="p4-s6" tag="document" status="completed" writes="tasks/knowledge/aiassist_live_draw__design.md">Registrar no design o que a verificacao mostrou, em especial a pausa que ficou e por que. Se a calibragem do usuario no p1 nao sobreviveu ao uso real, isso e resultado e deve ficar escrito.</step>
+        <step id="p4-s7" tag="sync_knowledge_index" status="completed" assignee="xml-knowledge-indexer">Reconciliar o indice com os arquivos de conhecimento criados e atualizados por esta task. Recibo em root notes.</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Guarda de laco e texto de status.</file>
+        <file path="tasks/knowledge/aiassist_live_draw__design.md">Design fechado com o resultado da verificacao.</file>
+      </output>
+      <review status="completed">Aprovado por xml-autonomous-approver, 2026-09-03 21:3x.
+      Evidencia: o usuario percorreu o roteiro dos seis criterios e reportou todos conformes. I4 verificado mecanicamente em p4-s5: sete grafos validos com marcadores inalterados, e apenas aiassistcontroller.cpp/.h modificados. Recibo do indice em root notes (added 3, files_indexed 26). Outputs conferidos: .cpp com a guarda e o texto de status, design.md com as decisoes e a secao de resultado.
+      Ressalva registrada, nao bloqueante nesta fase: com historyChanged entrando em p5, SC3 passa a depender da flag de supressao para continuar valendo. p5-s4 exige re-conferir SC3 sob o caminho novo.
+      Criterio original: Prova SC3 e SC6 e reconfirma SC1 a SC5 num roteiro unico. Os quatro invariantes verificados: um job em voo (I1), sem laco a partir da insercao (I2), nenhum trabalho com Live desligado (I3), grafos e contrato intactos (I4). O recibo do indice esta em root notes.</review>
+      <approval required_by="ai-approver" status="approved">Aprovado automaticamente apos conferencia de artefatos e da evidencia de execucao reportada pelo usuario.</approval>
+    </phase>
+
+
+    <phase id="p5" status="completed">
+      <description>SC7: fazer o gatilho ser "o desenho mudou" e nao "houve um traco novo". Nasceu da verificacao do p4-s4, quando o usuario observou que Ctrl+Z nao regenerava. Nao e retrabalho do p2 - e a definicao do gatilho que ficou mais larga, registrado como revisao do Intent Brief.</description>
+      <input>
+        <file path="tasks/knowledge/aiassist_live_draw__intent.md">SC7 e a entrada de Revisions que o motiva.</file>
+        <file path="toonz/sources/tnztools/toolutils.cpp">Linha 620: TToolUndo::notifyImageChanged, que nao notifica o level handle. Linha 617: a unica condicao em que notifica.</file>
+        <file path="toonz/sources/common/tcore/tundo.cpp">Linhas 259, 288 e 331: onde historyChanged e emitido.</file>
+      </input>
+      <steps>
+        <step id="p5-s1" tag="research" status="completed" reads="toonz/sources/tnztools/toolutils.cpp">Descobrir por que o undo nao chega ao gatilho. ACHADO: ToolUtils::TToolUndo::notifyImageChanged (toolutils.cpp:620) chama tool-onImageChanged() e invalida icones, mas nunca notifyLevelChange(); o level handle so e avisado quando o undo criou ou removeu frame/level (:617). Logo, desfazer um traco em frame existente nao emite xshLevelChanged. Sinal alternativo escolhido: TUndoManager::historyChanged, emitido em undo, redo, add e endBlock (tundo.cpp:259, :288, :331).</step>
+        <step id="p5-s2" tag="edit_file" status="completed" writes="toonz/sources/aiassist/aiassistcontroller.cpp">Extrair a lambda do gatilho para o metodo onDrawingChanged(), com as guardas intactas, e ligar as duas fontes a ele: xshLevelChanged e historyChanged. Descartado conscientemente: chamar notifyLevelChange no undo do OpenToonz, que consertaria na origem mas mudaria o comportamento de todos os outros ouvintes e sairia do painel. Ver D8.</step>
+        <step id="p5-s3" tag="use_tool" status="completed" reads="toonz/sources/aiassist/aiassistcontroller.cpp">Compilar o build Release. Feito: build limpo, sem erro.</step>
+        <step id="p5-s4" tag="verify" method="run" status="completed">RODAR: com Live ligado e sd15, desenhar, esperar a geracao, e dar Ctrl+Z. Evidencia exigida para SC7: desfazer regenera. Depois Ctrl+Y: refazer tambem regenera. E RE-CONFERIR SC3, que agora depende da flag: Insert as Level registra undo, entao passa pelo mesmo caminho do gatilho e so nao dispara por causa de m_suppressLiveTrigger. Registrar tambem se historyChanged dispara demais no uso normal.
+          EVIDENCIA 2026-09-03, reportada pelo usuario apos rodar o build: "ctrl-z regenera, insert as level continua sem disparar". SC7 provado. SC3 reconfirmado sob o caminho novo, que e o que importava: Insert as Level registra undo, entao agora passa por onDrawingChanged() e so nao dispara por causa de m_suppressLiveTrigger.
+          NAO reportado: se historyChanged dispara demais no uso prolongado. Nao houve queixa, mas tambem nao foi o alvo do teste - fica registrado como aberto em D8, sem bloquear.</step>
+        <step id="p5-s5" tag="document" status="completed" writes="tasks/knowledge/aiassist_live_draw__design.md">Fechar D8 com o que o uso mostrou, em especial se o sinal mais largo incomodou.</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Gatilho unificado em onDrawingChanged, com undo/redo como segunda fonte.</file>
+        <file path="toonz/sources/aiassist/aiassistcontroller.h">Declaracao de onDrawingChanged.</file>
+        <file path="tasks/knowledge/aiassist_live_draw__intent.md">SC7 e a revisao que o registra.</file>
+      </output>
+      <review status="completed">Aprovado por xml-autonomous-approver, 2026-09-03.
+      Evidencia de execucao, do usuario: Ctrl+Z regenera (SC7) e Insert as Level continua sem disparar (SC3 sob o caminho novo). Checkpoint (p5) em root notes atualizado com o observado. Outputs conferidos: aiassistcontroller.cpp com onDrawingChanged ligado as duas fontes, .h com a declaracao, intent.md com SC7 e a entrada de Revisions que registra a ampliacao de escopo. Build Release limpo.
+      A ampliacao de escopo foi tratada pelo caminho certo: SC7 entrou por revisao do Intent Brief, e o trabalho virou fase nova em vez de reescrita do p2 - o registro do que p2 entregou continua intacto.
+      Ressalva NAO bloqueante: se historyChanged dispara demais no uso prolongado nao foi verificado. Nao houve queixa, e a mitigacao esta escrita em D8. Registrado como aberto, nao como provado.</review>
+      <approval required_by="ai-approver" status="approved">Aprovado automaticamente apos conferencia de artefatos e da evidencia de execucao reportada pelo usuario.</approval>
+    </phase>
+
+  </phases>
+
+  <output>
+    <file path="toonz/sources/aiassist/aiassistcontroller.cpp">Painel com gatilho por desenho, coalescencia estendida e guarda de laco.</file>
+    <file path="toonz/sources/aiassist/aiassistcontroller.h">Estado novo do painel.</file>
+    <file path="tasks/knowledge/aiassist_live_draw__intent.md">Intent Brief.</file>
+    <file path="tasks/knowledge/aiassist_live_draw__design.md">Decisoes de design e o que a verificacao mostrou.</file>
+  </output>
+</task>

@@ -1,0 +1,444 @@
+<task id="note-level-cell-colors" status="completed">
+  <description>
+    Let users assign a color to Note Level cells in the Xsheet/Timeline so notes can be
+    visually organized (grouped, prioritized, color-coded by department, etc.).
+    A "Note Level" is a TXshSoundTextColumn holding a TXshSoundTextLevel whose frames carry
+    the note text; the color is attached to the note itself (the level frame), so it follows
+    the note across its whole run of cells and when the cell is copied or moved.
+    The palette reuses the scene's existing 12 Cell Mark colors, so no new preference UI is
+    needed and users can already re-tune the colors in Scene Settings.
+  </description>
+
+  <input>
+    <file path="toonz/sources/include/toonz/txshsoundtextlevel.h" type="cpp-header">
+      TXshSoundTextLevel: holds QList&lt;QString&gt; m_framesText (line 30) with
+      setFrameText/getFrameText (lines 41-42) and loadData/saveData (lines 44-45).
+      The per-note color id list is added here alongside m_framesText.
+    </file>
+    <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp" type="cpp-source">
+      Implementation of setFrameText/getFrameText (grow-on-write pattern), clone() which
+      currently copies only the name, and loadData/saveData which stream one "frame" child per
+      note plus a "type" child. Color persistence is added here, backward-compatibly.
+    </file>
+    <file path="toonz/sources/toonz/xshcellviewer.cpp" type="cpp-source">
+      CellArea::drawSoundTextColumn (line 2453) draws note cells: the getCellInfo lambda reads
+      the cell mark (line 2476), base colors come from XsheetViewer::getSoundTextColumnColor /
+      getSelectedSoundTextColumnColor / getSoundTextColumnBorderColor (lines 2531-2533), each
+      block is filled with tmpCellColor (line 2585) and the note text is drawn afterwards
+      (line 2611). CellArea::createCellMenu (line 3901) already knows soundTextCellsSelected
+      (line 3906) and ends with the "Cell Mark" submenu (lines 4124-4155) - the closest
+      precedent for the new "Note Color" submenu, including getColorChipIcon usage.
+      SetCellMarkUndo (lines 571-619) and CellArea::onSetCellMark (line 4409) are the
+      precedent for the new undo and slot.
+    </file>
+    <file path="toonz/sources/toonz/xshcellviewer.h" type="cpp-header">
+      CellArea declares drawSoundTextColumn (line 117) and the cell-mark slot; the new
+      onSetNoteColor slot and any helper are declared here.
+    </file>
+    <file path="toonz/sources/include/toonz/sceneproperties.h" type="cpp-header">
+      TSceneProperties::CellMark {name, color} (line 53) and getCellMarks/getCellMark
+      (lines 305-307) supply the shared 12-color palette this feature reuses.
+    </file>
+    <file path="toonz/sources/toonz/xsheetcmd.cpp" type="cpp-source">
+      XshCmd::newNoteLevel (line 1005) and NewNoteLevelUndo (line 965) show how a note level
+      and its column are created - useful for reproducing the feature during verification.
+    </file>
+    <file path="toonz/sources/toonzlib/txshsoundtextcolumn.cpp" type="cpp-source">
+      TXshSoundTextColumn::createSoundTextLevel assigns TFrameId(i+1) per note entry, so the
+      color index key is (cell.m_frameId.getNumber() - 1) - the same key already used to read
+      the note text in the viewer.
+    </file>
+    <folder path="tasks/knowledge">
+      Shared knowledge folder. opentoonz__core_libraries_architecture.md and
+      opentoonz__include_headers_map.md already describe the toonzlib/toonz split this change
+      spans; the change summary for this task is written back here.
+    </folder>
+  </input>
+
+  <notes>
+    Task profile: change
+    Risk level: low
+    Process weight: standard
+    Execution mode: standard-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Delivery mode: iterative
+    Validation policy: standard
+    Intent: inline
+    Design guidance: not-needed
+    Knowledge index: enabled
+    Knowledge index backend: sqlite-vec
+
+    Intent (inline):
+    - Goal: a user can pick a color for a Note Level cell from the Xsheet cell context menu and
+      see that note's cells tinted with it, in both Xsheet and Timeline orientation.
+    - Success criteria: SC1 color is settable and clearable ("None") per note from the cell
+      context menu; SC2 the whole run of cells belonging to that note is tinted, and the note
+      text stays legible; SC3 the color survives save + reload of the scene, and scenes saved
+      before this feature still load; SC4 setting a color is undoable/redoable and marks the
+      scene dirty; SC5 selection-wide application colors every note in the current cell
+      selection.
+    - Non-goals: coloring non-note columns; a new color-picker dialog or new preferences;
+      changing the column header color; exportxsheetpdf output; renderer (scenefx) output;
+      migrating or reusing the memo-note (TXshNoteSet) colors.
+    - Constraints: must not change the on-disk format for scenes that use no note colors
+      (old scenes must load unchanged, and a scene with no colors must still save loadable by
+      older builds); must not alter Cell Mark behaviour, which stays available on note cells;
+      must not regress the existing note-text layout/eliding logic in drawSoundTextColumn.
+    - Assumptions:
+      - (high) The color belongs to the note (level frame), not the row - confirmed by the user.
+      - (high) The palette is the scene's 12 Cell Mark colors - confirmed by the user.
+      - (medium) -1 means "no color" and is the default, mirroring TXshCellColumn cell marks.
+      - (medium) A tint (alpha-blended fill) over the existing note-cell color reads better than
+        a flat replacement, because the note text is drawn in black and the selected-cell color
+        must stay distinguishable. Final blend factor settled during phase 1 verification.
+      - (medium) drawSoundTextCell (line 2268) is dead code - its only call site is commented out
+        at lines 1417-1418 - so it is left untouched.
+
+    Progress:
+    - p1 completed: per-note color id on TXshSoundTextLevel, "Note Color" cell context submenu
+      reusing the 12 scene cell-mark colors, and blended tinting of the whole note cell run.
+
+    Verification (p1):
+    - Build: cmake --build toonz/build --config Release --target OpenToonz -> succeeded,
+      toonz/build/Release/OpenToonz.exe produced.
+    - Run: the Release binary was launched. The rendered tint and the submenu are visual, so
+      SC1/SC2 confirmation sits with the user at the p1 checkpoint below.
+
+    Artifacts:
+    - tasks/knowledge/note_level_colors__change_summary.md (change summary)
+    - tasks/knowledge/note-level-cell-colors__explanation.md (xml-change-explainer output)
+
+    Knowledge index sync:
+    - backend: sqlite-vec
+    - schema_version: 1
+    - added: 2 (change summary), then 2 (explanation)
+    - updated: 0
+    - removed: 0
+    - receipt_ts: 2026-08-31T14:07:31Z
+    - resulting state: 21 files / 485 chunks indexed
+
+    Verification limit (whole task): the Release build compiles clean and the binary runs, and every
+    phase was reviewed against the code. The OpenToonz GUI could not be driven from this environment,
+    so no rendered tint, menu click, save/reload or undo was observed. SC1-SC5 need the user
+    checkpoints below to be confirmed at runtime.
+
+    Checkpoint (p1r1): a colored note now carries the note color on its drag-handle strip (the
+    leading edge of the cell), not just in the cell body.
+
+    Checkpoint (p3): with the running build - color a note, undo, redo; select several notes and
+    color them in one action, then undo once; the title bar should show the scene as modified;
+    switch the Xsheet to Timeline orientation and check the tint there too.
+
+    Checkpoint (p2): with a colored note, save the scene and reopen it - the color comes back;
+    an older scene (or one with no colored note) still opens normally and writes no "frameColors"
+    tag.
+
+    Checkpoint (p1): run toonz/build/Release/OpenToonz.exe (or run-release.bat) - add a Note
+    Level column, right-click a note cell, pick Note Color and a color: the whole run of cells
+    for that note is tinted, "None" clears it, Cell Mark still works. Not yet saved with the
+    scene and not yet undoable - that is p2 and p3.
+  </notes>
+
+  <agents>
+    <agent name="xml-plan-executor" role="primary executor for all implementation phases" />
+    <agent name="xml-knowledge-indexer" role="reconciles the embedded vector index with tasks/knowledge markdown" />
+  </agents>
+
+  <phases>
+
+    <phase id="p1" status="completed">
+      <description>
+        Walking skeleton: color lives on the note level in memory, is settable from the cell
+        context menu, and is visible in the Xsheet. No persistence, no undo yet.
+      </description>
+      <input>
+        <file path="toonz/sources/include/toonz/txshsoundtextlevel.h">Add the color-id storage and accessors next to m_framesText.</file>
+        <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp">Implement the accessors with the same grow-on-write pattern as setFrameText.</file>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">drawSoundTextColumn (2453) for the tint; createCellMenu (3901) for the submenu.</file>
+        <file path="toonz/sources/toonz/xshcellviewer.h">CellArea slot declaration.</file>
+        <file path="toonz/sources/include/toonz/sceneproperties.h">CellMark palette accessors.</file>
+      </input>
+      <steps>
+        <step id="p1s1" tag="edit_file" status="completed"
+              writes="toonz/sources/include/toonz/txshsoundtextlevel.h">
+          Add QList&lt;int&gt; m_framesColorId to TXshSoundTextLevel plus
+          setFrameColorId(int frameIndex, int colorId) and getFrameColorId(int frameIndex) const
+          (returns -1 when unset or out of range). Keep the DVAPI export macro pattern intact.
+        </step>
+        <step id="p1s2" tag="edit_file" status="completed"
+              reads="toonz/sources/include/toonz/txshsoundtextlevel.h"
+              writes="toonz/sources/toonzlib/txshsoundtextlevel.cpp">
+          Implement the accessors: setFrameColorId grows m_framesColorId with -1 the way
+          setFrameText grows m_framesText with a blank string; getFrameColorId returns -1 past
+          the end of the list.
+        </step>
+        <step id="p1s3" tag="edit_file" status="completed"
+              reads="toonz/sources/include/toonz/txshsoundtextlevel.h"
+              writes="toonz/sources/toonz/xshcellviewer.cpp">
+          In drawSoundTextColumn, resolve the note's color id once per cell block from
+          cell.getSoundTextLevel()-&gt;getFrameColorId(cell.m_frameId.getNumber() - 1). When it is
+          &gt;= 0, look up TSceneProperties::getCellMark(id).color and blend it into tmpCellColor
+          for both the normal and selected states before p.fillRect (line 2585), leaving the
+          drag-handle/side color and the text-layout code untouched.
+        </step>
+        <step id="p1s4" tag="edit_file" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp"
+              writes="toonz/sources/toonz/xshcellviewer.h">
+          Declare the CellArea::onSetNoteColor() slot next to the existing onSetCellMark slot.
+        </step>
+        <step id="p1s5" tag="edit_file" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.h"
+              writes="toonz/sources/toonz/xshcellviewer.cpp">
+          In createCellMenu, when the clicked cell carries a sound-text level, add a
+          "Note Color" submenu modelled on the Cell Mark submenu (4124-4155): a checkable
+          "None" entry (-1) plus one checkable entry per TSceneProperties CellMark, each with
+          getColorChipIcon(mark.color) and setData({row, col, id}), all wired to onSetNoteColor.
+          Implement onSetNoteColor to write the id onto the clicked note's level frame and call
+          TApp::instance()-&gt;getCurrentXsheet()-&gt;notifyXsheetChanged().
+        </step>
+        <step id="p1s6" tag="use_tool" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp">
+          Build: cmake --build toonz/build --config Release --target OpenToonz
+        </step>
+        <step id="p1s7" tag="verify" status="completed">
+          Launch the Release build (run-release.bat), create a Note Level column
+          (Xsheet column header context menu, New Note Level), type a note across several rows,
+          right-click the note cell, pick Note Color and a color, and confirm every cell of that
+          note is tinted, the note text is still readable, "None" clears it, and Cell Mark still
+          works on the same cell.
+        </step>
+      </steps>
+      <output>
+        <file path="toonz/sources/include/toonz/txshsoundtextlevel.h">Per-note color id storage and accessors.</file>
+        <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp">Accessor implementations.</file>
+        <file path="toonz/sources/toonz/xshcellviewer.h">onSetNoteColor slot declaration.</file>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">Note Color submenu, slot, and the tinted note-cell rendering.</file>
+      </output>
+      <review status="completed">
+        Proves SC1 and SC2. Run the Release build, add a Note Level, set and clear a note color
+        from the cell context menu, and confirm the tint covers the note's whole cell run in the
+        vertical Xsheet with legible text. Reject if the tint swallows the selection highlight so
+        selected note cells are no longer distinguishable, if the note text layout changed, or if
+        the Cell Mark submenu regressed.
+
+        Reviewed: the increment builds and runs. Release build of the OpenToonz target succeeded
+        (cmake --build toonz/build --config Release --target OpenToonz -&gt; toonz/build/Release/
+        OpenToonz.exe) and the binary was launched. Code review of the three touched call sites:
+        the tint is applied per note block in drawSoundTextColumn (xshcellviewer.cpp:2592-2618),
+        blended at ratio 0.45 over both the normal and the selected base color so the selection
+        stays distinguishable; the note-text layout code below it is untouched; the Cell Mark
+        submenu is unchanged and the new Note Color submenu is appended after it
+        (xshcellviewer.cpp:4188-4221). Visual confirmation of the rendered tint is the user
+        checkpoint for p1 and is recorded in root notes.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Approved (approver rubric applied inline, low-risk standard phase). Builds, runs, no
+        regression to the existing note-cell drawing or Cell Mark paths.
+      </approval>
+    </phase>
+
+    <phase id="p2" status="completed">
+      <description>
+        Persist note colors in the scene file, backward- and forward-compatibly, and carry them
+        through level cloning.
+      </description>
+      <input>
+        <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp">loadData/saveData stream "frame" children and a "type" child; clone() currently copies only the name.</file>
+        <file path="toonz/sources/include/toonz/txshsoundtextlevel.h">Color storage added in p1.</file>
+      </input>
+      <steps>
+        <step id="p2s1" tag="edit_file" status="completed"
+              reads="toonz/sources/include/toonz/txshsoundtextlevel.h"
+              writes="toonz/sources/toonzlib/txshsoundtextlevel.cpp">
+          saveData: emit the color ids only when at least one note has a color, as a single new
+          child (e.g. "frameColors" holding a comma-separated id list) written after the "frame"
+          children, so untouched scenes keep an unchanged format.
+          loadData: accept the new tag and fill m_framesColorId; leave the existing unknown-tag
+          throw for anything else, and default every note to -1 when the tag is absent.
+        </step>
+        <step id="p2s2" tag="edit_file" status="completed"
+              reads="toonz/sources/include/toonz/txshsoundtextlevel.h"
+              writes="toonz/sources/toonzlib/txshsoundtextlevel.cpp">
+          Make clone() copy m_framesText and m_framesColorId so a duplicated note level keeps
+          its text and colors.
+        </step>
+        <step id="p2s3" tag="use_tool" status="completed"
+              reads="toonz/sources/toonzlib/txshsoundtextlevel.cpp">
+          Build: cmake --build toonz/build --config Release --target OpenToonz
+        </step>
+        <step id="p2s4" tag="verify" status="completed">
+          Round-trip: color two notes, save the scene, reload it, and confirm the colors come
+          back. Then open a scene saved before this change (or one saved with no note colors)
+          and confirm it loads without error and the notes read as uncolored. Inspect the saved
+          .tnz to confirm no color tag is written when nothing is colored.
+        </step>
+      </steps>
+      <output>
+        <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp">Backward-compatible color persistence and color-preserving clone().</file>
+      </output>
+      <review status="completed">
+        Proves SC3. Save/reload keeps the colors; a pre-feature scene still opens; a scene with
+        no colored notes writes no new tag. Reject if loadData throws on old files, or if the new
+        tag is written unconditionally.
+
+        Reviewed: Release build succeeds with the persistence in place (the first link failed only
+        because the running p1 binary held toonzlib.dll; the app was closed and the rebuild
+        produced toonz/build/Release/OpenToonz.exe). Static evidence for the format rules:
+        saveData writes the "frameColors" child only behind the hasColor guard
+        (txshsoundtextlevel.cpp:97-112), so a scene with no colored note is byte-identical to
+        before; loadData accepts the tag as a new branch and leaves the unknown-tag throw intact
+        (txshsoundtextlevel.cpp:66-77), and a scene without the tag leaves m_framesColorId empty,
+        which getFrameColorId reports as -1 for every note. The serialization shape (a QString of
+        space-separated ints written with os.child(...) &lt;&lt; QString and read back with is &gt;&gt; QString
+        then split) is the same one TXshCellColumn::saveCellMarks/loadCellMarks already round-trips
+        (txshcolumn.cpp:433-474). The end-to-end save/reload of a colored note in the running app
+        is the user checkpoint for p2, recorded in root notes.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Approved (approver rubric applied inline, low-risk standard phase). Format change is
+        additive and guarded; old scenes take the default path.
+      </approval>
+    </phase>
+
+    <phase id="p3" status="completed">
+      <description>
+        Finish the interaction: undo/redo, selection-wide application, scene-dirty signalling,
+        horizontal Timeline check, then record the change summary and sync the knowledge index.
+      </description>
+      <input>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">SetCellMarkUndo (571-619) and onSetCellMark (4409) as the undo precedent; onSetNoteColor from p1.</file>
+        <file path="toonz/sources/include/toonz/txshsoundtextlevel.h">Color accessors.</file>
+        <folder path="tasks/knowledge">Destination for the change summary.</folder>
+      </input>
+      <steps>
+        <step id="p3s1" tag="edit_file" status="completed"
+              reads="toonz/sources/include/toonz/txshsoundtextlevel.h"
+              writes="toonz/sources/toonz/xshcellviewer.cpp">
+          Add a SetNoteColorUndo modelled on SetCellMarkUndo: hold the affected notes as
+          (level, frameIndex, oldId) plus the new id, implement undo/redo/getSize, and a
+          getHistoryString naming the color; register it with TUndoManager from onSetNoteColor.
+        </step>
+        <step id="p3s2" tag="edit_file" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp"
+              writes="toonz/sources/toonz/xshcellviewer.cpp">
+          Extend onSetNoteColor: when the clicked cell is inside the current cell selection,
+          apply the color to every distinct (level, frameId) note in that selection as one undo
+          entry; otherwise apply to the clicked note only. Set the scene dirty flag and notify
+          the xsheet change so the view repaints.
+        </step>
+        <step id="p3s3" tag="use_tool" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp">
+          Build: cmake --build toonz/build --config Release --target OpenToonz
+        </step>
+        <step id="p3s4" tag="verify" status="completed">
+          Exercise the finished feature: set a color, undo, redo; select several notes at once
+          and color them in one action, then undo it in one step; confirm the title bar shows the
+          scene as modified; switch the Xsheet to Timeline (horizontal) orientation and confirm
+          the tint draws correctly there too, including held/continued cells.
+        </step>
+        <step id="p3s5" tag="document" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp"
+              writes="tasks/knowledge/note_level_colors__change_summary.md">
+          Write the change summary: what was added, the (level, frameIndex) color key, the reuse
+          of the Cell Mark palette, the on-disk tag and its backward-compatibility rule, and the
+          touched files with their entry points.
+        </step>
+        <step id="p3s6" tag="sync_knowledge_index" status="completed" assignee="xml-knowledge-indexer"
+              reads="tasks/knowledge/note_level_colors__change_summary.md"
+              writes="tasks/knowledge/.index">
+          Sync the embedded vector index with tasks/knowledge and record the added/updated/
+          removed counts and schema version in this task's root notes.
+        </step>
+      </steps>
+      <output>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">SetNoteColorUndo plus selection-wide, undoable, dirty-flagging color assignment.</file>
+        <file path="tasks/knowledge/note_level_colors__change_summary.md">Change summary for future tasks.</file>
+        <folder path="tasks/knowledge/.index">Refreshed knowledge index.</folder>
+      </output>
+      <review status="completed">
+        Proves SC4 and SC5, and re-confirms SC1-SC3 still hold. Undo/redo restores the previous
+        colors in one step (including multi-note application), the scene is marked dirty, and the
+        Timeline orientation renders the tint correctly. Reject if a multi-note coloring needs
+        several undos, or if any earlier phase's behaviour regressed.
+
+        Reviewed: Release build succeeds with undo, selection-wide application and the dirty flag in
+        place (toonz/build/Release/OpenToonz.exe, built 2026-08-31 11:04) and the binary is running.
+        SetNoteColorUndo carries every affected note as (TXshSoundTextLevelP, frameIndex, idBefore)
+        with one shared new id (xshcellviewer.h:40, xshcellviewer.cpp:627-664), so a multi-note
+        recolor is a single undo entry by construction; it holds smart pointers so an undone note
+        level cannot be freed out from under the history, and both undo and redo notify the xsheet
+        and set the scene dirty flag. onSetNoteColor de-dupes notes across the selection with a
+        std::set keyed on (level, frameIndex) because one note spans several cells
+        (xshcellviewer.cpp:4535-4575). Timeline orientation shares the single drawSoundTextColumn
+        paint path that the tint hooks into, above the vertical/horizontal branches, so both
+        orientations take the same code. The change summary is written
+        (tasks/knowledge/note_level_colors__change_summary.md) and the knowledge index is synced.
+
+        Limit of this evidence, recorded rather than glossed: the GUI itself was never driven - this
+        environment cannot click through the OpenToonz UI - so undo/redo, multi-note selection, the
+        dirty flag and the Timeline rendering were confirmed by build + code review, not by
+        observation. Runtime confirmation of SC1-SC5 sits with the user at the checkpoints in root
+        notes.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Approved (approver rubric applied inline, low-risk standard phase). Implementation complete
+        and building; runtime confirmation delegated to the user checkpoints.
+      </approval>
+    </phase>
+
+    <phase id="p1r1" kind="review" reviews="p1" status="completed">
+      <description>
+        Review round 1 on p1: the note tint covered the cell body but not the drag-handle strip on
+        the leading edge of the cell, which kept painting with the untinted
+        SoundTextColumnBorderColor - reported by the user as "the left border of the note level
+        cells still stays gray".
+      </description>
+      <input>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">
+          drawSoundTextColumn: blendNoteColor lambda, and the per-cell paint loop where
+          drawDragHandle was still being passed the untinted sideColor.
+        </file>
+      </input>
+      <steps>
+        <step id="p1r1s1" tag="edit_file" status="completed"
+              writes="toonz/sources/toonz/xshcellviewer.cpp">
+          Give blendNoteColor a ratio parameter and tint the drag handle too: the cell body keeps
+          the 0.45 mix (black note text must stay readable) while the drag handle, which carries no
+          text, takes 0.8 so the note color reads as a strong stripe down the leading edge.
+        </step>
+        <step id="p1r1s2" tag="use_tool" status="completed"
+              reads="toonz/sources/toonz/xshcellviewer.cpp">
+          Build: cmake --build toonz/build --config Release --target OpenToonz
+        </step>
+        <step id="p1r1s3" tag="verify" status="completed">
+          Relaunch the Release build and confirm the leading-edge strip of a colored note now
+          carries the note color instead of the flat gray border color.
+        </step>
+      </steps>
+      <output>
+        <file path="toonz/sources/toonz/xshcellviewer.cpp">Drag handle tinted with the note color.</file>
+      </output>
+      <review status="completed">
+        Re-proves SC2 (the whole note cell, not just its body, reads as colored). The build relinked
+        cleanly at 11:15 after the user closed the running instance that held OpenToonz.exe, and the
+        rebuilt binary is running. Same limit as the original round: the rendered strip was not
+        observed from here, so the user confirms it at the checkpoint.
+      </review>
+      <approval required_by="ai-approver" status="approved">
+        Approved (approver rubric applied inline). The fix is confined to the paint path; the body
+        ratio, the text layout and the cell-mark dot are unchanged.
+      </approval>
+    </phase>
+
+  </phases>
+
+  <output>
+    <file path="toonz/sources/include/toonz/txshsoundtextlevel.h">Per-note color id storage and accessors on TXshSoundTextLevel.</file>
+    <file path="toonz/sources/toonzlib/txshsoundtextlevel.cpp">Accessors, backward-compatible persistence, color-preserving clone.</file>
+    <file path="toonz/sources/toonz/xshcellviewer.h">CellArea::onSetNoteColor declaration.</file>
+    <file path="toonz/sources/toonz/xshcellviewer.cpp">"Note Color" context submenu, undoable color assignment, tinted note-cell rendering.</file>
+    <file path="tasks/knowledge/note_level_colors__change_summary.md">Durable summary of the change.</file>
+    <file path="tasks/knowledge/note-level-cell-colors__explanation.md">Change explanation produced by xml-change-explainer.</file>
+  </output>
+</task>

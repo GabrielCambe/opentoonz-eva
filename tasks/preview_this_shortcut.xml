@@ -1,0 +1,302 @@
+<task id="preview-this-shortcut" status="pending">
+    <description>
+        Register the "Preview This" feature as a global CommandManager command so it
+        appears in the Configure Shortcuts dialog and can be assigned a keyboard shortcut.
+
+        Currently, "Preview This" is only a local QAction created in the RowArea context
+        menu (xshrowviewer.cpp:1367). It calls RowArea::onPreviewThis() which sets both
+        the start and stop play-range markers to the right-clicked row (m_row), effectively
+        pinning preview to a single frame.
+
+        Because it is never registered with CommandManager::define(), it does not appear in
+        the ShortcutPopup tree and cannot receive a shortcut binding.
+
+        The fix requires:
+        1. Adding a new command identifier MI_PreviewThis to menubarcommandids.h.
+        2. Registering it via createMenuXsheetAction() in MainWindow::defineActions().
+        3. Creating a MenuItemHandler subclass that performs the same "set both markers to
+           current frame" logic, using TApp::instance()->getCurrentFrame()->getFrame()
+           instead of the context-menu m_row.
+        4. Updating the context menu in RowArea::contextMenuEvent() to use the
+           CommandManager action so the shortcut label shows up in the menu.
+    </description>
+
+    <meta>
+        <task id="discover-shortcut-wiring" status="completed">
+            <description>
+                Investigate how OpenToonz shortcuts are wired: command IDs, registration,
+                CommandManager, ShortcutPopup, and how existing xsheet context menu commands
+                (e.g. MI_InsertSceneFrame) are made shortcuttable.
+            </description>
+            <input>
+                <file path="toonz/sources/include/toonzqt/menubarcommand.h" type="c++">
+                    CommandManager class defining command registration, Node, define(), getAction().
+                </file>
+                <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+                    All MI_* command identifier macros.
+                </file>
+                <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+                    MainWindow::defineActions() — registration site for all shortcuttable commands.
+                    MainWindow::createAction() / createMenuXsheetAction() — how commands are defined.
+                </file>
+                <file path="toonz/sources/toonz/shortcutpopup.h" type="c++">
+                    ShortcutTree and ShortcutPopup — UI that reads CommandManager to populate
+                    the shortcut configuration tree.
+                </file>
+                <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+                    RowArea::contextMenuEvent() — where "Preview This" is defined as a local
+                    QAction. RowArea::onPreviewThis() — implementation at line 1534.
+                </file>
+                <file path="toonz/sources/toonz/xshrowviewer.h" type="c++">
+                    RowArea class declaration including onPreviewThis() slot.
+                </file>
+            </input>
+            <steps>
+                <step id="meta-1" tag="research" status="completed">
+                    Inspected CommandManager (menubarcommand.h): singleton with define(), getAction(),
+                    setShortcut(), loadShortcuts(). Commands are registered by calling define() with
+                    an id string, CommandType enum, default shortcut, and a QAction pointer.
+                </step>
+                <step id="meta-2" tag="research" status="completed">
+                    Inspected menubarcommandids.h: all command IDs are #define MI_Name "MI_Name" macros.
+                    No MI_PreviewThis exists. MI_Preview (line 52) is the render preview command — unrelated.
+                </step>
+                <step id="meta-3" tag="research" status="completed">
+                    Inspected MainWindow::defineActions() in mainwindow.cpp: each shortcuttable command
+                    is registered via createMenuXsheetAction(MI_Id, name, defaultShortcut, iconSVGName)
+                    which calls createAction() → CommandManager::define(). This is what makes commands
+                    appear in ShortcutPopup.
+                </step>
+                <step id="meta-4" tag="research" status="completed">
+                    Inspected RowArea::contextMenuEvent(): "Preview This" at line 1367 is created with
+                    menu->addAction(tr("Preview This")) and connected to SLOT(onPreviewThis()). In
+                    contrast, commands like MI_InsertSceneFrame at line 1384 use
+                    cmdManager->getAction(MI_InsertSceneFrame) — which is why those show shortcut
+                    labels in the menu and are configurable.
+                </step>
+                <step id="meta-5" tag="research" status="completed">
+                    Inspected onPreviewThis() at line 1534: it reads m_row (set during contextMenuEvent
+                    based on mouse position), then calls setPlayRange(m_row, m_row, step). For a global
+                    shortcut handler, we should use getCurrentFrame()->getFrame() instead.
+                </step>
+                <step id="meta-6" tag="research" status="completed">
+                    Identified the MenuItemHandler pattern (menubarcommand.h:235): constructor takes
+                    CommandId, which auto-registers with CommandManager::setHandler(). The execute()
+                    virtual method is called when the command is triggered. Many xsheet commands like
+                    InsertSceneFrameCommand follow this pattern (xsheetcmd.cpp).
+                </step>
+                <step id="meta-7" tag="document" status="completed">
+                    Documented findings in this meta task. Key insight: the only thing preventing
+                    "Preview This" from being shortcuttable is that it was never registered with
+                    CommandManager. The fix involves 4 files.
+                </step>
+            </steps>
+            <output>
+                <file path="tasks/knowledge/opentoonz_shortcut__context.md" type="markdown">
+                    Reusable context on how OpenToonz shortcut system works.
+                </file>
+            </output>
+        </task>
+    </meta>
+
+    <input>
+        <folder path="tasks/knowledge">Shared knowledge folder.</folder>
+        <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+            Command ID header — add MI_PreviewThis here.
+        </file>
+        <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+            MainWindow::defineActions() — register MI_PreviewThis here.
+        </file>
+        <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+            RowArea context menu and onPreviewThis() implementation.
+        </file>
+        <file path="toonz/sources/toonz/xshrowviewer.h" type="c++">
+            RowArea class declaration.
+        </file>
+        <file path="toonz/sources/include/toonzqt/menubarcommand.h" type="c++">
+            CommandManager and MenuItemHandler API.
+        </file>
+        <file path="toonz/sources/toonz/xsheetcmd.cpp" type="c++">
+            Reference for MenuItemHandler pattern (InsertSceneFrameCommand example).
+        </file>
+    </input>
+
+    <phases>
+        <phase id="phase-1-implement" status="awaiting-approval">
+            <description>
+                Add MI_PreviewThis as a registered command, create a global handler, and
+                update the context menu to use it.
+            </description>
+            <input>
+                <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+                    Target for adding MI_PreviewThis macro.
+                </file>
+                <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+                    Target for registering MI_PreviewThis in defineActions().
+                </file>
+                <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+                    Target for: (a) adding MenuItemHandler subclass,
+                    (b) updating contextMenuEvent to use cmdManager->getAction().
+                </file>
+                <file path="toonz/sources/toonz/xsheetcmd.cpp" type="c++">
+                    Reference for MenuItemHandler pattern.
+                </file>
+            </input>
+            <steps>
+                <step id="p1-s1" tag="edit_file" status="completed">
+                    Add #define MI_PreviewThis "MI_PreviewThis" to menubarcommandids.h,
+                    near the existing preview-related defines (around line 52-58).
+                </step>
+                <step id="p1-s2" tag="edit_file" status="completed">
+                    Add a PreviewThisCommand class (MenuItemHandler subclass) in
+                    xshrowviewer.cpp that implements execute() with:
+                      int currentFrame = TApp::instance()->getCurrentFrame()->getFrame();
+                      int r0, r1, step;
+                      XsheetGUI::getPlayRange(r0, r1, step);
+                      XsheetGUI::setPlayRange(currentFrame, currentFrame, step);
+                    Register it at file scope with static initialization.
+                </step>
+                <step id="p1-s3" tag="edit_file" status="completed">
+                    In MainWindow::defineActions() in mainwindow.cpp, register MI_PreviewThis
+                    using createMenuXsheetAction(MI_PreviewThis, QT_TR_NOOP("Preview This"), "", "").
+                    Place it near the existing xsheet commands (around line 2249-2260).
+                </step>
+                <step id="p1-s4" tag="edit_file" status="completed">
+                    In RowArea::contextMenuEvent() in xshrowviewer.cpp, replace the local
+                    QAction creation:
+                      QAction *previewThis = menu->addAction(tr("Preview This"));
+                      connect(previewThis, SIGNAL(triggered()), SLOT(onPreviewThis()));
+                    with:
+                      menu->addAction(cmdManager->getAction(MI_PreviewThis));
+                    This will show the shortcut label in the context menu and use the
+                    registered command handler when triggered.
+
+                    NOTE: Since the global handler uses getCurrentFrame() instead of m_row,
+                    the behavior when triggered from the context menu will use the current
+                    frame (which is set when you click on a row). This is consistent because
+                    right-clicking a row also sets the current frame to that row first.
+                    Keep onPreviewThis() as a fallback if needed, but it may become unused.
+                </step>
+                <step id="p1-s5" tag="verify" status="completed">
+                    Verify all files compile by checking includes and that MI_PreviewThis
+                    is accessible from all source files that reference it. Ensure
+                    menubarcommandids.h is included in both mainwindow.cpp and xshrowviewer.cpp.
+                </step>
+            </steps>
+            <output>
+                <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+                    Updated with MI_PreviewThis command identifier.
+                </file>
+                <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+                    Updated with MI_PreviewThis registration in defineActions().
+                </file>
+                <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+                    Updated with PreviewThisCommand handler class and updated context menu.
+                </file>
+            </output>
+            <review status="completed">
+                I added MI_PreviewThis to menubarcommandids.h. I added PreviewThisCommand in xshrowviewer.cpp, implementing it correctly with XsheetGUI ranges. I swapped the legacy behavior with the new cmdManager action in context menu. I also verified appropriate header files are included where needed. The logic aligns securely without causing undefined dependencies.
+            </review>
+            <approval required_by="ai-approver" status="pending">
+                Waiting for approval before proceeding to verification phase.
+            </approval>
+        </phase>
+
+        <phase id="phase-2-verify-and-document" status="pending">
+            <description>
+                Verify the changes are structurally correct and document the outcome.
+            </description>
+            <input>
+                <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+                    Modified command IDs file.
+                </file>
+                <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+                    Modified mainwindow with registered action.
+                </file>
+                <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+                    Modified xshrowviewer with handler and updated context menu.
+                </file>
+            </input>
+            <steps>
+                <step id="p2-s1" tag="verify" status="pending">
+                    Verify structural correctness: check that PreviewThisCommand follows
+                    the same pattern as InsertSceneFrameCommand (static instantiation, 
+                    MenuItemHandler constructor, execute() override). Check that the
+                    command ID macro is correctly formatted. Check that the context menu
+                    now moves cmdManager->getAction() after the cmdManager variable
+                    is declared (line 1377).
+                </step>
+                <step id="p2-s2" tag="verify" status="pending">
+                    Check that "Preview This" will appear under the "Xsheet" category in
+                    the ShortcutPopup by confirming we used MenuXsheetCommandType via
+                    createMenuXsheetAction().
+                </step>
+                <step id="p2-s3" tag="document" status="pending">
+                    Write a concise change summary to tasks/knowledge/opentoonz_shortcut__change_summary.md
+                    documenting the pattern for adding new shortcuttable commands.
+                </step>
+                <step id="p2-s4" tag="summarize" status="pending">
+                    Summarize the outcome: which files were modified, what the user should
+                    expect (new entry in Configure Shortcuts under Xsheet category, shortcut
+                    label visible in context menu when assigned).
+                </step>
+            </steps>
+            <output>
+                <file path="tasks/knowledge/opentoonz_shortcut__change_summary.md" type="markdown">
+                    Change summary and reusable pattern documentation.
+                </file>
+            </output>
+            <review status="pending">
+                Review focus: verification evidence, documentation quality, completeness
+                of pattern documentation for future use.
+            </review>
+            <approval required_by="ai-approver" status="pending">
+                Waiting for autonomous approval to close the task.
+            </approval>
+        </phase>
+    </phases>
+
+    <output>
+        <file path="toonz/sources/toonz/menubarcommandids.h" type="c++">
+            Final file with MI_PreviewThis added.
+        </file>
+        <file path="toonz/sources/toonz/mainwindow.cpp" type="c++">
+            Final file with MI_PreviewThis registered.
+        </file>
+        <file path="toonz/sources/toonz/xshrowviewer.cpp" type="c++">
+            Final file with PreviewThisCommand handler and updated context menu.
+        </file>
+        <file path="tasks/knowledge/opentoonz_shortcut__context.md" type="markdown">
+            Reusable context on how shortcuts are wired in OpenToonz.
+        </file>
+        <file path="tasks/knowledge/opentoonz_shortcut__change_summary.md" type="markdown">
+            Change summary and reusable add-shortcut pattern.
+        </file>
+    </output>
+
+    <notes>
+        Task profile: change
+        Risk level: low
+        Execution mode: standard-xml
+        Execution autonomy: autonomous
+        Approval mode: autonomous-gated
+        Design guidance: not-needed
+
+        Key design decision: The global shortcut handler will use getCurrentFrame()->getFrame()
+        instead of the context-menu m_row. This is correct because:
+        (a) When navigating the xsheet, the current frame follows cursor position.
+        (b) The user's workflow is: navigate to a frame → press shortcut → both markers set.
+        (c) When right-clicking in the row area, the current frame is already set to that row
+            by the mouse press event before the context menu appears.
+
+        The context menu's "Preview This" action will be replaced with the registered command.
+        This means it will use the command's global handler instead of onPreviewThis().
+        Since right-clicking sets the current frame, the behavior is equivalent.
+
+        Note: The cmdManager variable in contextMenuEvent() is declared at line 1377. The
+        "Preview This" action is currently at line 1367 (before cmdManager is declared).
+        When switching to cmdManager->getAction(MI_PreviewThis), we must move it after
+        line 1377 or declare cmdManager earlier. The simplest approach is to move the
+        Preview This entry to after the existing cmdManager declaration.
+    </notes>
+</task>

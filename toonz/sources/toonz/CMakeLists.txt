@@ -81,6 +81,7 @@ set(MOC_HEADERS
     projectpopup.h
     psdsettingspopup.h
     reframepopup.h
+    soundgainpopup.h
     renumberpopup.h
     reslist.h
     ruler.h
@@ -150,6 +151,9 @@ if(PLATFORM EQUAL 64)
         ../stopmotion/canon.h
         ../stopmotion/stopmotionserial.h
         ../stopmotion/stopmotionlight.h
+        ../aiassist/comfyclient.h
+        ../aiassist/graphtemplate.h
+        ../aiassist/aiassistcontroller.h
         cameracapturelevelcontrol.h
         penciltestpopup.h
         navtageditorpopup.h
@@ -386,6 +390,7 @@ set(SOURCES
     locatorpopup.cpp
     styleshortcutswitchablepanel.cpp
     reframepopup.cpp
+    soundgainpopup.cpp
     autoinputcellnumberpopup.cpp
     colormodelbehaviorpopup.cpp
     boardsettingspopup.cpp
@@ -421,6 +426,9 @@ if(PLATFORM EQUAL 64)
         ../stopmotion/canon.cpp
         ../stopmotion/stopmotionserial.cpp
         ../stopmotion/stopmotionlight.cpp
+        ../aiassist/comfyclient.cpp
+        ../aiassist/graphtemplate.cpp
+        ../aiassist/aiassistcontroller.cpp
         cameracapturelevelcontrol.cpp
         penciltestpopup.cpp
         navtageditorpopup.cpp
@@ -494,6 +502,7 @@ include_directories(
     ../../sources/toonzfarm/include
     ../../sources/toonzqt
     ../../sources/stopmotion
+    ../../sources/aiassist
 )
 
 if (WITH_CANON)

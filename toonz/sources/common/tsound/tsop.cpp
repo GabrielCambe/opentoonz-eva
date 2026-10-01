@@ -1,6 +1,7 @@
 
 
 #include <cstring>
+#include <cmath>
 
 #include "tsop.h"
 #include "tsound_t.h"
@@ -1546,6 +1547,152 @@ TSoundTrackP TSop::fadeIn(const TSoundTrackP src, double riseFactor) {
   TSoundTrackP out          = src->apply(fader);
   delete fader;
   return out;
+}
+
+//==============================================================================
+//
+// TSop::gain / TSop::measure
+//
+//==============================================================================
+
+namespace {
+
+// Magnitude of a full-scale sample per type. The 24-bit sample is stored in
+// a TINT32, so the integer limits of ChannelValueType would be wrong for it.
+double fullScaleForBits(int bitPerSample) {
+  switch (bitPerSample) {
+  case 8:
+    return 128.0;
+  case 16:
+    return 32768.0;
+  case 24:
+    return 8388608.0;
+  default:
+    return 1.0;  // 32-bit float
+  }
+}
+
+template <class T>
+void scaleRange(TSoundTrackT<T> *track, TINT32 s0, TINT32 s1, double factor) {
+  typedef typename T::ChannelValueType ChannelValueType;
+  TINT32 count = track->getSampleCount();
+  s0           = tcrop<TINT32>(s0, 0, count);
+  s1           = tcrop<TINT32>(s1, 0, count);
+  if (s1 <= s0) return;
+
+  int channelCount = track->getChannelCount();
+  bool isFloat     = (T::getSampleType() == TSound::FLOAT);
+  bool isSigned    = T::isSampleSigned();
+  double fullScale = fullScaleForBits(T::getBitPerSample());
+  // Unsigned 8-bit audio sits on 128, so the scaling pivots there; signed
+  // types pivot on zero and clip at the largest magnitude they can hold.
+  double centre = isSigned ? 0.0 : fullScale;
+  double lo     = isSigned ? -fullScale : 0.0;
+  double hi     = isSigned ? fullScale - 1.0 : 2.0 * fullScale - 1.0;
+
+  T *sample = track->samples() + s0;
+  T *end    = track->samples() + s1;
+  for (; sample < end; ++sample) {
+    for (int k = 0; k < channelCount; ++k) {
+      double v = ((double)sample->getValue(k) - centre) * factor + centre;
+      if (!isFloat) {
+        v = tcrop(v, lo, hi);
+        v = (v >= 0.0) ? std::floor(v + 0.5) : std::ceil(v - 0.5);
+      }
+      sample->setValue(k, (ChannelValueType)v);
+    }
+  }
+}
+
+class TSoundTrackGain final : public TSoundTransform {
+  const std::vector<TSop::GainRange> &m_ranges;
+
+  template <class T>
+  TSoundTrackP applyT(const TSoundTrackT<T> &src) {
+    TSoundTrackP out      = src.clone();
+    TSoundTrackT<T> *outT = dynamic_cast<TSoundTrackT<T> *>(out.getPointer());
+    if (!outT) return out;
+    for (const TSop::GainRange &r : m_ranges)
+      scaleRange(outT, r.m_s0, r.m_s1, r.m_factor);
+    return out;
+  }
+
+public:
+  TSoundTrackGain(const std::vector<TSop::GainRange> &ranges)
+      : m_ranges(ranges) {}
+
+  TSoundTrackP compute(const TSoundTrackMono8Signed &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackMono8Unsigned &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackStereo8Signed &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackStereo8Unsigned &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackMono16 &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackStereo16 &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackMono24 &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackStereo24 &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackMono32Float &t) override {
+    return applyT(t);
+  }
+  TSoundTrackP compute(const TSoundTrackStereo32Float &t) override {
+    return applyT(t);
+  }
+};
+
+}  // namespace
+
+//------------------------------------------------------------------------------
+
+TSoundTrackP TSop::gain(const TSoundTrackP &src,
+                        const std::vector<GainRange> &ranges) {
+  if (!src || ranges.empty()) return src;
+  TSoundTrackGain transform(ranges);
+  return src->apply(&transform);
+}
+
+//------------------------------------------------------------------------------
+
+bool TSop::measure(const TSoundTrackP &src, TINT32 s0, TINT32 s1, double &peak,
+                   double &rms) {
+  if (!src || src->getSampleCount() <= 0) return false;
+  TINT32 last = src->getSampleCount() - 1;
+  s0          = tcrop<TINT32>(s0, 0, last);
+  s1          = tcrop<TINT32>(s1, 0, last);
+  if (s1 < s0) return false;
+
+  int channelCount = src->getChannelCount();
+  peak             = 0.0;
+  double sumSq     = 0.0;
+  for (TINT32 s = s0; s <= s1; ++s) {
+    for (int k = 0; k < channelCount; ++k) {
+      double v = src->getPressure(s, (TSound::Channel)k);
+      if (std::fabs(v) > peak) peak = std::fabs(v);
+      sumSq += v * v;
+    }
+  }
+  rms = std::sqrt(sumSq / ((double)(s1 - s0 + 1) * channelCount));
+  return true;
+}
+
+//------------------------------------------------------------------------------
+
+double TSop::fullScalePressure(const TSoundTrackFormat &format) {
+  if (format.m_sampleType == TSound::FLOAT) return 1.0;
+  return fullScaleForBits(format.m_bitPerSample);
 }
 
 //==============================================================================

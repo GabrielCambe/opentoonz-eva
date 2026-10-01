@@ -244,7 +244,11 @@ bool loadSubScene(const TFilePath &scenePath);
 enum SaveSceneFlags {
   SILENTLY_OVERWRITE = 0x1,
   SAVE_SUBXSHEET     = 0x2,
-  AUTO_SAVE          = 0x4
+  AUTO_SAVE          = 0x4,
+  // Writes a copy of the top xsheet to fp with the sound gain sections left
+  // out, so stock OpenToonz can open it. The current scene keeps its path and
+  // dirty state: nothing about the working file changes.
+  EXPORT_WITHOUT_SOUND_GAIN = 0x8
 };
 
 // ritorna true sse la scena e' stata salvata

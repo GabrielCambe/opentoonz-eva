@@ -123,6 +123,38 @@ DVAPI TSoundTrackP fadeIn(const TSoundTrackP src, double riseFactor);
 DVAPI TSoundTrackP fadeOut(const TSoundTrackP src, double decayFactor);
 
 /*!
+    A sample range [s0, s1) and the linear factor it is multiplied by.
+    Used by gain(); a factor of 1.0 leaves the samples untouched.
+  */
+struct GainRange {
+  TINT32 m_s0;
+  TINT32 m_s1;
+  double m_factor;
+};
+
+/*!
+    Returns a copy of src with each range scaled by its factor. Integer
+    samples clip at the type's full scale; float samples stay unclipped.
+    The copy is made once for all the ranges, so a track with several gain
+    sections costs one allocation rather than one per section.
+  */
+DVAPI TSoundTrackP gain(const TSoundTrackP &src,
+                        const std::vector<GainRange> &ranges);
+
+/*!
+    Peak and RMS pressure of src over the samples [s0, s1], taken across
+    every channel. Returns false when the range holds no samples.
+  */
+DVAPI bool measure(const TSoundTrackP &src, TINT32 s0, TINT32 s1, double &peak,
+                   double &rms);
+
+/*!
+    Pressure of a full-scale sample in the given format, so that
+    20 * log10(pressure / fullScalePressure) is a level in dBFS.
+  */
+DVAPI double fullScalePressure(const TSoundTrackFormat &format);
+
+/*!
     Returns a soundtrack that has just the crossFactor of sample of src2.
     The samples of the output soundTrack come from the value of the last sample
     of src1 to the value of the first sample of src2

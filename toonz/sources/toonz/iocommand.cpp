@@ -6,6 +6,7 @@
 // Toonz includes
 #include "menubarcommandids.h"
 #include "filebrowserpopup.h"
+#include "toonz/txshsoundcolumn.h"
 #include "tapp.h"
 #include "history.h"
 #include "fileselection.h"
@@ -1416,6 +1417,7 @@ bool IoCmd::saveScene(const TFilePath &path, int flags) {
   bool overwrite     = (flags & SILENTLY_OVERWRITE) != 0;
   bool saveSubxsheet = (flags & SAVE_SUBXSHEET) != 0;
   bool isAutosave    = (flags & AUTO_SAVE) != 0;
+  bool exportCopy    = (flags & EXPORT_WITHOUT_SOUND_GAIN) != 0;
   TApp *app          = TApp::instance();
 
   assert(!path.isEmpty());
@@ -1457,12 +1459,16 @@ bool IoCmd::saveScene(const TFilePath &path, int flags) {
 
   TXsheet *xsheet = 0;
   if (saveSubxsheet) xsheet = TApp::instance()->getCurrentXsheet()->getXsheet();
+  // Passing the top xsheet explicitly makes ToonzScene::save treat the write
+  // as a sub-xsheet save: it restores the scene path afterwards and keeps
+  // the untitled state, which is exactly what a copy export needs.
+  if (exportCopy) xsheet = scene->getTopXsheet();
 
   SaveInProgressGuard saveGuard;
   if (!saveGuard.acquired()) return false;
 
   // Automatically remove unused levels
-  if (!saveSubxsheet && !isAutosave &&
+  if (!saveSubxsheet && !exportCopy && !isAutosave &&
       Preferences::instance()->isAutoRemoveUnusedLevelsEnabled()) {
     if (LevelCmd::removeUnusedLevelsFromCast(false))
       DVGui::info(
@@ -1509,7 +1515,7 @@ bool IoCmd::saveScene(const TFilePath &path, int flags) {
   if (app->getCurrentScene()->getDirtyFlag())
     scene->getContentHistory(true)->modifiedNow();
 
-  if (oldFullPath != newFullPath) {
+  if (oldFullPath != newFullPath && !exportCopy) {
     IconGenerator::instance()->clearRequests();
     IconGenerator::instance()->clearSceneIcons();
 
@@ -1535,6 +1541,10 @@ bool IoCmd::saveScene(const TFilePath &path, int flags) {
 
   bool saveSucceeded = true;
   try {
+    // The guard lives only around the write, so the working scene's own
+    // saves keep their gain sections.
+    std::unique_ptr<SoundGainOmitScope> omitGain;
+    if (exportCopy) omitGain.reset(new SoundGainOmitScope());
     scene->save(scenePath, xsheet, !isAutosave);
   } catch (const TSystemException &se) {
     if (!isAutosave)
@@ -1559,6 +1569,16 @@ bool IoCmd::saveScene(const TFilePath &path, int flags) {
   if (!saveSucceeded) {
     if (!isAutosave) QApplication::restoreOverrideCursor();
     return false;
+  }
+
+  if (exportCopy) {
+    // The working scene was not saved, so its dirty flag, history and
+    // recent-files entry must stay as they were.
+    FileBrowser::refreshFolder(scenePath.getParentDir());
+    QApplication::restoreOverrideCursor();
+    DVGui::info(QObject::tr("Exported %1 without sound gain sections.")
+                    .arg(toQString(scenePath)));
+    return true;
   }
 
   if (!overwrite && !saveSubxsheet)

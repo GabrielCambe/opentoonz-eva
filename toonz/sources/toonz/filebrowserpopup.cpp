@@ -662,6 +662,36 @@ void SaveSubSceneAsPopup::initFolder() {
 }
 
 //=============================================================================
+// ExportCompatibleScenePopup
+
+ExportCompatibleScenePopup::ExportCompatibleScenePopup()
+    : FileBrowserPopup(tr("Export Scene for Stock OpenToonz"),
+                       Options(FOR_SAVING)) {
+  setOkText(tr("Export"));
+  addFilterType("tnz");
+  connect(m_nameField, SIGNAL(returnPressedNow()), m_okButton,
+          SLOT(animateClick()));
+}
+
+bool ExportCompatibleScenePopup::execute() {
+  if (m_selectedPaths.empty()) return false;
+
+  const TFilePath &fp = *m_selectedPaths.begin();
+  if (isSpaceString(QString::fromStdString(fp.getName()))) return false;
+
+  return IoCmd::saveScene(fp, IoCmd::EXPORT_WITHOUT_SOUND_GAIN);
+}
+
+void ExportCompatibleScenePopup::initFolder() {
+  ToonzScene *scene = TApp::instance()->getCurrentScene()->getScene();
+  if (!scene->isUntitled())
+    setFolder(scene->getScenePath().getParentDir());
+  else
+    setFolder(
+        TProjectManager::instance()->getCurrentProject()->getScenesPath());
+}
+
+//=============================================================================
 // LoadLevelPopup
 namespace {
 QPushButton *createShowButton(QWidget *parent) {
@@ -2386,6 +2416,8 @@ OpenPopupCommandHandler<SaveSceneAsPopup> saveSceneAsPopupCommand(
     MI_SaveSceneAs);
 OpenPopupCommandHandler<SaveSubSceneAsPopup> saveSubSceneAsPopupCommand(
     MI_SaveSubxsheetAs);
+OpenPopupCommandHandler<ExportCompatibleScenePopup>
+    exportCompatibleScenePopupCommand(MI_ExportCompatibleScene);
 OpenPopupCommandHandler<LoadLevelPopup> loadLevelPopupCommand(MI_LoadLevel);
 OpenPopupCommandHandler<ConvertPopupWithInput> convertWithInputPopupCommand(
     MI_ConvertFileWithInput);

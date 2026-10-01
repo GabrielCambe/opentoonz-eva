@@ -7,9 +7,11 @@
 #include "toonz/txshcell.h"
 #include "toonz/txshsoundlevel.h"
 #include "tsound.h"
+#include "tsop.h"
 
 #include <QList>
 #include <QTimer>
+#include <vector>
 
 #undef DVAPI
 #undef DVVAR
@@ -26,11 +28,44 @@
 class TFilePath;
 
 //=============================================================================
+//  SoundGainSection
+//=============================================================================
+
+/*! A stretch of a sound clip whose level is changed by m_gainDb when the
+    clip is mixed. Frames are clip-local, [m_startFrame, m_endFrame) with
+    frame 0 the first frame of the audio file, so trimming or moving the clip
+    keeps the gain attached to the same audio. The source file is never
+    modified. */
+struct SoundGainSection {
+  int m_startFrame;
+  int m_endFrame;
+  double m_gainDb;
+};
+
+//=============================================================================
+//  SoundGainOmitScope
+//=============================================================================
+
+/*! While one of these is alive, ColumnLevel::saveData leaves the gain
+    sections out of the stream, so the file opens in builds that do not know
+    the tag. The sections stay in memory and are written again by any save
+    made after the scope ends. */
+class DVAPI SoundGainOmitScope {
+public:
+  SoundGainOmitScope();
+  ~SoundGainOmitScope();
+  static bool isActive();
+};
+
+//=============================================================================
 //  ColumnLevel
 //=============================================================================
 
 class ColumnLevel {
   TXshSoundLevelP m_soundLevel;
+
+  //! Sorted and non-overlapping; see SoundGainSection.
+  std::vector<SoundGainSection> m_gainSections;
 
   /*!Offsets: in frames. Start offset is a positive number.*/
   int m_startOffset;
@@ -85,6 +120,21 @@ public:
   void updateFrameRate(double newFrameRate);
 
   void setFrameRate(double fps) { m_fps = fps; }
+
+  const std::vector<SoundGainSection> &getGainSections() const {
+    return m_gainSections;
+  }
+  //! Replaces every section; the list is sorted and merged on the way in.
+  void setGainSections(const std::vector<SoundGainSection> &sections);
+  //! Sets [startFrame, endFrame) to gainDb, cutting whatever sections were
+  //! there. A gain of 0 dB removes the stretch instead of storing it.
+  void setGain(int startFrame, int endFrame, double gainDb);
+  //! Gain at a clip-local frame; 0 outside every section.
+  double getGainDbAt(int frame) const;
+  //! The ranges TSop::gain must scale when the clip's samples [s0, s1] are
+  //! played, expressed as offsets inside that extract.
+  std::vector<TSop::GainRange> getGainRanges(TINT32 s0, TINT32 s1,
+                                             double samplePerFrame) const;
 };
 
 //=============================================================================
@@ -200,6 +250,24 @@ when the user play a single level and hence the audio behind..*/
   TSoundTrackP mixingTogether(const std::vector<TXshSoundColumn *> &vect,
                               int fromFrame = -1, int toFram = -1,
                               double fps = -1);
+
+  // Gain sections addressed by xsheet rows, [r0, r1] inclusive. A range
+  // spanning several clips is split between them.
+  void setGainForRows(int r0, int r1, double gainDb);
+  double getGainDbAtRow(int row) const;
+  //! True on the first visible row of a section, where its label is drawn.
+  bool isGainSectionStart(int row) const;
+
+  // Per-clip access for undo: the sections of clip levelIndex, in the order
+  // the clips are stored.
+  int getColumnLevelCount() const { return m_levels.size(); }
+  std::vector<SoundGainSection> getGainSections(int levelIndex) const;
+  void setGainSections(int levelIndex,
+                       const std::vector<SoundGainSection> &sections);
+
+  //! Peak and RMS of the audio under the rows before any gain, in dBFS.
+  //! Returns false when the rows hold no audio.
+  bool measureRows(int r0, int r1, double &peakDb, double &rmsDb) const;
 
 protected:
   bool setCell(int row, const TXshCell &cell, bool updateSequence);

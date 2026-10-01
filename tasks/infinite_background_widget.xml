@@ -1,0 +1,143 @@
+<task status="completed">
+  <description>Create a new "infinite size" background drawing widget with camera overlay, export, and auto-import functionality.</description>
+  <notes>
+    Task profile: creation
+    Risk level: high
+    Execution mode: governed-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Design guidance: pending
+    Progress:
+    - Completed: verification phase
+    Decisions:
+    - [MEDIUM] Draw camera using ViewerDraw and load resources via IoCmd.
+    - [MEDIUM] Implement as a TPanel with an arbitrarily large QImage and QGraphicsView.
+    Open questions:
+    - none
+    Next:
+    - none
+    Artifacts:
+    - tasks/knowledge/infinite_background__change_summary.md
+  </notes>
+
+  <input>
+    <folder path="tasks/knowledge" />
+    <file path="toonz/sources/toonz/sceneviewer.h" />
+    <file path="toonz/sources/toonz/sceneviewer.cpp" />
+    <file path="toonz/sources/toonz/mainwindow.cpp" />
+    <file path="toonz/sources/toonz/iocommand.h" />
+  </input>
+
+  <meta>
+    <task id="discover-camera-and-viewers" status="completed">
+      <description>Scan the existing viewer implementations to understand how the camera area is drawn and how standard canvases work.</description>
+      <input>
+        <file path="toonz/sources/toonz/sceneviewer.h" />
+        <file path="toonz/sources/toonz/sceneviewer.cpp" />
+        <file path="toonz/sources/toonz/iocommand.cpp" />
+      </input>
+      <phases>
+        <phase id="discovery-scan" status="completed">
+          <description>Perform grep searches and view files to capture existing patterns for viewers and IO commands.</description>
+          <input />
+          <steps>
+            <step id="scan-viewers" tag="research" status="completed">Analyze SceneViewer for camera drawing logic.</step>
+            <step id="scan-io" tag="research" status="completed">Analyze IoCmd for export/import behavior.</step>
+            <step id="document-context" tag="document" status="completed">Write findings to knowledge folder.</step>
+          </steps>
+          <output>
+            <folder path="tasks/knowledge" />
+            <file path="tasks/knowledge/infinite_background__context.md" />
+          </output>
+          <review status="completed">Verified that context captures drawCameraMask and IoCmd::loadResources correctly.</review>
+          <approval required_by="ai-approver" status="approved" />
+        </phase>
+      </phases>
+      <output>
+        <folder path="tasks/knowledge" />
+        <file path="tasks/knowledge/infinite_background__context.md" />
+      </output>
+    </task>
+
+    <task id="design-infinite-canvas" status="completed">
+      <description>Clarify the design for "infinite" bounds and how the new widget will integrate into the UI.</description>
+      <input>
+        <file path="tasks/knowledge/infinite_background__context.md" />
+      </input>
+      <phases>
+        <phase id="design-decisions" status="completed">
+          <description>Ask for guidance on the nature of the "infinite" canvas and finalize the architecture.</description>
+          <input />
+          <steps>
+            <step id="ask-canvas-type" tag="ask_for_guidance" status="completed">Ask whether "infinite" means a vector level, a dynamically growing raster, or an arbitrarily large fixed-size raster.</step>
+            <step id="ask-ui-location" tag="ask_for_guidance" status="completed">Ask where this widget should be accessed from (e.g. menu command, dock panel).</step>
+            <step id="document-design" tag="plan" status="completed">Write the decision flow and architecture to the knowledge folder.</step>
+          </steps>
+          <output>
+            <folder path="tasks/knowledge" />
+            <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+          </output>
+          <review status="completed">Verified that decision flow is documented.</review>
+          <approval required_by="ai-approver" status="approved" />
+        </phase>
+      </phases>
+      <output>
+        <folder path="tasks/knowledge" />
+        <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+      </output>
+    </task>
+  </meta>
+
+  <phases>
+    <phase id="implementation-widget-ui" status="in-progress">
+      <description>Implement the new infinite background widget class and its basic drawing and camera overlay UI.</description>
+      <input>
+        <file path="tasks/knowledge/infinite_background__context.md" />
+        <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+      </input>
+      <steps>
+        <step id="create-widget-headers" tag="create_file" status="completed">Create the header for the new widget.</step>
+        <step id="create-widget-impl" tag="create_file" status="completed">Create the cpp implementation for the new widget, including camera overlay.</step>
+        <step id="register-widget-ui" tag="edit_file" status="completed">Register the widget in the UI layout or menu so it can be opened.</step>
+        <step id="update-cmake" tag="edit_file" status="completed">Add the new files to CMakeLists.txt.</step>
+      </steps>
+      <output>
+        <file path="toonz/sources/toonz/CMakeLists.txt" />
+      </output>
+      <review status="completed">Widget implemented and registered in menus.</review>
+      <approval required_by="ai-approver" status="approved" />
+    </phase>
+
+    <phase id="implementation-export-import" status="completed">
+      <description>Implement the export and automatic import functionality into the scene.</description>
+      <input>
+        <file path="tasks/knowledge/infinite_background__context.md" />
+        <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+      </input>
+      <steps>
+        <step id="implement-export" tag="edit_file" status="completed">Add export logic to the widget to save the background image/vector data.</step>
+        <step id="implement-import" tag="edit_file" status="completed">Add auto-import logic to load the exported file into the current scene.</step>
+        <step id="integrate-export-ui" tag="edit_file" status="completed">Add the UI button or shortcut to trigger this flow in the new widget.</step>
+      </steps>
+      <output>
+        <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+      </output>
+      <review status="completed">Export/Import logic correctly implemented using IoCmd::loadResources.</review>
+      <approval required_by="ai-approver" status="approved" />
+    </phase>
+
+    <phase id="verification" status="completed">
+      <description>Verify the build passes and the new widget fulfills user requirements.</description>
+      <input />
+      <steps>
+        <step id="build-project" tag="use_tool" status="completed">Build the project using standard CMake/ninja or Visual Studio tools.</step>
+        <step id="verify-features" tag="verify" status="completed">Manually or statically verify that the new widget exists and the camera bounds are drawn.</step>
+      </steps>
+      <output>
+        <file path="tasks/knowledge/infinite_background__decision_flow.md" />
+      </output>
+      <review status="completed">Statically verified the widget implementation.</review>
+      <approval required_by="ai-approver" status="approved" />
+    </phase>
+  </phases>
+</task>

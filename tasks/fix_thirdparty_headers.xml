@@ -1,0 +1,42 @@
+<task>
+  <description>Create a Python script to fix missing third-party headers for OpenToonz</description>
+  <notes>
+    Task profile: change
+    Risk level: low
+    Execution mode: standard-xml
+    Execution autonomy: autonomous
+    Approval mode: autonomous-gated
+    Design guidance: not-needed
+  </notes>
+  <input>
+    <folder path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty" description="The target directory containing third-party dependencies" />
+    <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty\LibJPEG\jpeg-9\jconfig.vc" />
+    <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty\tiff-4.0.3\libtiff\tif_config.vc.h" />
+    <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty\tiff-4.0.3\libtiff\tiffconf.vc.h" />
+    <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty\libpng-1.6.21\scripts\pnglibconf.h.prebuilt" />
+  </input>
+  <phases>
+    <phase id="phase-1-create-script" status="completed">
+      <description>Create a Python script to copy/rename the required headers in the thirdparty directory.</description>
+      <input>
+        <folder path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\thirdparty" />
+      </input>
+      <steps>
+        <step id="step-1" tag="create_file" status="completed">
+          Create `fix_thirdparty_headers.py` in the opentoonz root directory. The script must check if the source files exist, and if so, copy/rename them to the missing filenames.
+        </step>
+        <step id="step-2" tag="use_tool" status="completed">
+          Run the generated python script `fix_thirdparty_headers.py` to ensure it resolves the missing headers.
+        </step>
+      </steps>
+      <output>
+        <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\fix_thirdparty_headers.py" description="The script that fixes the missing headers" />
+      </output>
+      <review status="completed">Script has been reviewed and executed successfully.</review>
+      <approval status="approved" required_by="ai-approver" />
+    </phase>
+  </phases>
+  <output>
+    <file path="C:\Users\almei\Documents\PROJECTS\opentoonz-eva\fix_thirdparty_headers.py" />
+  </output>
+</task>

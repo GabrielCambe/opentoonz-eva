@@ -15,6 +15,7 @@
 
 // TnzCore includes
 #include "tsystem.h"
+#include "tsound.h"
 #include "tconvert.h"
 #include "tundo.h"
 #include "tbigmemorymanager.h"
@@ -281,6 +282,7 @@ Preferences::Preferences() {
   setUnits();
   setCameraUnits();
   setUndoMemorySize();
+  setAudioOutputDevice();
 
   // Load level formats
   getDefaultLevelFormats(m_levelFormats);
@@ -642,6 +644,9 @@ void Preferences::definePreferenceItems() {
   define(blankColor, "blankColor", QMetaType::QColor, QColor(Qt::white));
   define(rewindAfterPlayback, "rewindAfterPlayback", QMetaType::Bool, true);
   define(shortPlayFrameCount, "shortPlayFrameCount", QMetaType::Int, 8, 1, 100);
+  // Stored by name, not index: an empty string is the system default.
+  define(audioOutputDevice, "audioOutputDevice", QMetaType::QString, "");
+  setCallBack(audioOutputDevice, &Preferences::setAudioOutputDevice);
   define(previewAlwaysOpenNewFlip, "previewAlwaysOpenNewFlip", QMetaType::Bool,
          false);
   define(fitToFlipbookWhenPreview, "fitToFlipbookWhenPreview", QMetaType::Bool,
@@ -982,6 +987,13 @@ void Preferences::setAutosavePeriod() {
 void Preferences::setUndoMemorySize() {
   int memorySize = getIntValue(undoMemorySize);
   TUndoManager::manager()->setUndoMemorySize(memorySize);
+}
+
+//-----------------------------------------------------------------
+
+void Preferences::setAudioOutputDevice() {
+  TSoundOutputDevice::setPreferredDevice(
+      getStringValue(audioOutputDevice).toStdWString());
 }
 
 //-----------------------------------------------------------------

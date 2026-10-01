@@ -2189,6 +2189,9 @@ void MainWindow::defineActions() {
                        "Ctrl+Shift+S", "save_scene");
   createMenuFileAction(MI_SaveSceneAs, QT_TR_NOOP("&Save Scene As..."), "",
                        "save_scene_as");
+  createMenuFileAction(MI_ExportCompatibleScene,
+                       QT_TR_NOOP("Export Scene for Stock OpenToonz..."), "",
+                       "save_scene_as");
   menuAct = createMenuFileAction(MI_RevertScene, QT_TR_NOOP("&Revert Scene"),
                                  "", "revert_scene");
   menuAct->setEnabled(false);
@@ -2537,6 +2540,8 @@ void MainWindow::defineActions() {
   createMenuCellsAction(MI_Rolldown, QT_TR_NOOP("&Roll Down"), "", "rolldown");
   createMenuCellsAction(MI_TimeStretch, QT_TR_NOOP("&Time Stretch..."), "",
                         "time_stretch");
+  createMenuCellsAction(MI_AdjustSoundGain, QT_TR_NOOP("Adjust Sound &Gain..."),
+                        "");
   createMenuCellsAction(MI_CreateBlankDrawing,
                         QT_TR_NOOP("&Create Blank Drawing"), "Alt+D",
                         "add_cell");
@@ -2750,6 +2755,7 @@ void MainWindow::defineActions() {
   createMenuWindowsAction(MI_OpenStopMotionPanel,
                           QT_TR_NOOP("&Stop Motion Controls"), "");
 #endif
+  createMenuWindowsAction(MI_OpenAIAssistPanel, QT_TR_NOOP("&AI Assist"), "");
   createMenuWindowsAction(MI_OpenLevelView, QT_TR_NOOP("&Viewer"), "",
                           "viewer");
   createMenuWindowsAction(MI_OpenXshView, QT_TR_NOOP("&Xsheet"), "", "xsheet");

@@ -1495,6 +1495,7 @@ QMenuBar *StackedMenuBar::createFullMenuBar() {
 #if defined(x64)
   addMenuItem(windowsMenu, MI_OpenStopMotionPanel);
 #endif
+  addMenuItem(windowsMenu, MI_OpenAIAssistPanel);
   addMenuItem(windowsMenu, MI_StartupPopup);
   addMenuItem(windowsMenu, MI_OpenGuidedDrawingControls);
   addMenuItem(windowsMenu, MI_OpenCustomPanels);

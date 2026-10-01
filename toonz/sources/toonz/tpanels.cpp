@@ -33,6 +33,7 @@
 
 #if defined(x64)
 #include "stopmotioncontroller.h"
+#include "aiassistcontroller.h"
 #endif
 
 #include "tasksviewer.h"
@@ -1590,6 +1591,28 @@ OpenFloatingPanel openStopMotionPanelCommand(
 //-----------------------------------------------------------------------------
 
 #endif  // x64
+
+//=============================================================================
+// AIAssistPanel
+//-----------------------------------------------------------------------------
+
+class AIAssistPanelFactory final : public TPanelFactory {
+public:
+  AIAssistPanelFactory() : TPanelFactory("AIAssistController") {}
+
+  void initialize(TPanel *panel) override {
+    AIAssistController *aiAssistController = new AIAssistController(panel);
+    panel->setWidget(aiAssistController);
+    panel->setWindowTitle(QObject::tr("AI Assist"));
+    panel->setIsMaximizable(false);
+  }
+} aiAssistPanelFactory;
+
+//=============================================================================
+OpenFloatingPanel openAIAssistPanelCommand(MI_OpenAIAssistPanel,
+                                           "AIAssistController",
+                                           QObject::tr("AI Assist"));
+//-----------------------------------------------------------------------------
 
 //=============================================================================
 // BrushPresetPanel - Dynamic brush preset management panel

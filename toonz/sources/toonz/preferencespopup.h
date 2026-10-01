@@ -114,6 +114,7 @@ private:
   QWidget* createXsheetPage();
   QWidget* createAnimationPage();
   QWidget* createPreviewPage();
+  QWidget* createAudioPage();
   QWidget* createOnionSkinPage();
   QWidget* createColorsPage();
   QWidget* createVersionControlPage();
@@ -174,6 +175,7 @@ private slots:
   void onAdditionalStyleSheetEdited();
   void onPixelUnitExternallySelected(bool on);
   void onInterfaceFontChanged(const QString& text);
+  void onRefreshAudioDevices();
   void onLutPathChanged();
   void onCheck30bitDisplay();
 
